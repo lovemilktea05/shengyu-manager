@@ -108,7 +108,7 @@ main{padding:14px}
 <div class="app">
 <header>
   <div class="brand">盛昱室內裝修有限公司</div>
-  <div class="sub">公司管理系統 V1｜手機版</div>
+  <div class="sub">公司管理系統 V2｜手機版</div>
 </header>
 
 <main>
@@ -146,6 +146,29 @@ main{padding:14px}
   <div id="detailWrap"></div>
 </section>
 
+
+<section id="clients" class="page">
+  <div class="section-title">
+    <h2>客戶管理</h2>
+    <button class="linkbtn" onclick="openClientForm()">＋新增</button>
+  </div>
+  <div class="card">
+    <input id="clientSearch" placeholder="搜尋客戶、公司或電話" oninput="renderClients()" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+  </div>
+  <div id="clientList"></div>
+</section>
+
+<section id="vendors" class="page">
+  <div class="section-title">
+    <h2>廠商管理</h2>
+    <button class="linkbtn" onclick="openVendorForm()">＋新增</button>
+  </div>
+  <div class="card">
+    <input id="vendorSearch" placeholder="搜尋廠商、工種或電話" oninput="renderVendors()" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+  </div>
+  <div id="vendorList"></div>
+</section>
+
 <section id="yearEnd" class="page">
   <div class="section-title">
     <h2>年底總結算</h2>
@@ -176,8 +199,8 @@ main{padding:14px}
 <section id="more" class="page">
   <div class="section-title"><h2>更多功能</h2></div>
   <div class="card">
-    <div class="row"><span>客戶管理</span><span class="muted">下一版擴充</span></div>
-    <div class="row"><span>廠商管理</span><span class="muted">下一版擴充</span></div>
+    <div class="row" style="align-items:center"><span><b>客戶管理</b><br><span class="muted">名單、聯絡方式、關聯工程</span></span><button class="linkbtn" onclick="showClients()">查看</button></div>
+    <div class="row" style="align-items:center"><span><b>廠商管理</b><br><span class="muted">工種、聯絡人、電話、備註</span></span><button class="linkbtn" onclick="showVendors()">查看</button></div>
     <div class="row"><span>照片與文件</span><span class="muted">下一版擴充</span></div>
     <div class="row" style="align-items:center">
       <span><b>年底總結算</b><br><span class="muted">年度工程、收款、支出與結餘</span></span>
@@ -221,7 +244,9 @@ main{padding:14px}
 
 <script>
 const LS='shengyu_manager_v1';
-let db=JSON.parse(localStorage.getItem(LS)||'{"projects":[],"incomes":[],"expenses":[],"progress":[]}');
+let db=JSON.parse(localStorage.getItem(LS)||'{"projects":[],"incomes":[],"expenses":[],"progress":[],"clients":[],"vendors":[]}');
+db.clients=db.clients||[];
+db.vendors=db.vendors||[];
 let currentProjectId=null;
 let projectView='current';
 const save=()=>{localStorage.setItem(LS,JSON.stringify(db));renderAll();}
@@ -254,6 +279,14 @@ function modal(title,html){document.getElementById('modalTitle').textContent=tit
 function projectOptions(){
  return db.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
 }
+
+function clientOptions(selected=''){
+ return '<option value="">自行輸入／未指定</option>'+db.clients.map(c=>`<option value="${c.id}" ${c.id===selected?'selected':''}>${c.name}</option>`).join('');
+}
+function vendorOptions(selected=''){
+ return '<option value="">自行輸入／未指定</option>'+db.vendors.map(v=>`<option value="${v.id}" ${v.id===selected?'selected':''}>${v.name}${v.trade?'｜'+v.trade:''}</option>`).join('');
+}
+
 function openQuick(type){
  if(type==='menu'){
    modal('新增紀錄',`<div class="quick">
@@ -266,6 +299,7 @@ function openQuick(type){
  if(type==='project'){
   modal('新增工程',`<form class="form" onsubmit="addProject(event)">
    <label>工程名稱 *</label><input name="name" required placeholder="例如：王宅室內裝修工程">
+   <label>從客戶名單選擇</label><select name="clientId" onchange="fillClientFromList(this)">${clientOptions()}</select>
    <label>客戶／公司名稱</label><input name="client" placeholder="例如：王先生／○○有限公司">
    <label>聯絡人</label><input name="contact" placeholder="例如：王先生">
    <label>聯絡電話</label><input name="phone" inputmode="tel" placeholder="09xx-xxx-xxx">
@@ -294,6 +328,7 @@ function openQuick(type){
   modal('新增支出',`<form class="form" onsubmit="addExpense(event)">
    <label>工程 *</label><select name="projectId" required>${projectOptions()}</select>
    <label>類別</label><select name="type"><option>材料</option><option>工資</option><option>外包</option><option>代工</option><option>運費</option><option>雜支</option></select>
+   <label>從廠商名單選擇</label><select name="vendorId" onchange="fillVendorFromList(this)">${vendorOptions()}</select>
    <label>廠商／對象</label><input name="vendor">
    <label>金額 *</label><input name="amount" type="number" inputmode="numeric" min="0" required>
    <label>支出日期</label><input name="date" type="date" value="${today()}">
@@ -313,6 +348,22 @@ function openQuick(type){
  }
 }
 function formObj(e){e.preventDefault();return Object.fromEntries(new FormData(e.target).entries())}
+
+function fillClientFromList(sel){
+ const c=db.clients.find(x=>x.id===sel.value);
+ if(!c) return;
+ const f=sel.form;
+ if(f.client) f.client.value=c.name||'';
+ if(f.contact) f.contact.value=c.contact||'';
+ if(f.phone) f.phone.value=c.phone||'';
+}
+function fillVendorFromList(sel){
+ const v=db.vendors.find(x=>x.id===sel.value);
+ if(!v) return;
+ const f=sel.form;
+ if(f.vendor) f.vendor.value=v.name||'';
+}
+
 function addProject(e){let x=formObj(e);db.projects.push({id:id(),...x,contract:+x.contract||0,created:Date.now()});save();closeModal();showPage('projects')}
 function addIncome(e){let x=formObj(e);db.incomes.push({id:id(),...x,amount:+x.amount||0,created:Date.now()});save();closeModal();if(currentProjectId) openProject(currentProjectId)}
 function addExpense(e){let x=formObj(e);db.expenses.push({id:id(),...x,amount:+x.amount||0,created:Date.now()});save();closeModal();if(currentProjectId) openProject(currentProjectId)}
@@ -527,8 +578,95 @@ function renderYearEnd(){
  `).join(''):'<div class="empty">這個年度目前沒有可結算資料</div>';
 }
 
+
+function showClients(){
+ showPage('clients');
+ renderClients();
+}
+function renderClients(){
+ const q=((document.getElementById('clientSearch')||{}).value||'').trim().toLowerCase();
+ const arr=db.clients.filter(c=>[c.name,c.contact,c.phone,c.line,c.address].join(' ').toLowerCase().includes(q));
+ document.getElementById('clientList').innerHTML=arr.length?arr.map(c=>{
+   const related=db.projects.filter(p=>p.clientId===c.id || (!p.clientId && p.client===c.name));
+   return `<div class="card">
+     <div class="row"><h3>${c.name}</h3><button class="linkbtn" onclick="openClientForm('${c.id}')">編輯</button></div>
+     <div class="row"><span class="muted">聯絡人</span><span>${c.contact||'—'}</span></div>
+     <div class="row"><span class="muted">電話</span><span>${c.phone||'—'}</span></div>
+     <div class="row"><span class="muted">LINE</span><span>${c.line||'—'}</span></div>
+     <div class="row"><span class="muted">地址</span><span>${c.address||'—'}</span></div>
+     <div class="row"><span class="muted">關聯工程</span><span>${related.length}</span></div>
+     ${related.length?`<div class="muted" style="margin-top:8px">${related.map(p=>`<button class="linkbtn" onclick="openProject('${p.id}')">${p.name}</button>`).join('')}</div>`:''}
+   </div>`;
+ }).join(''):'<div class="empty">目前沒有符合的客戶資料</div>';
+}
+function openClientForm(cid=''){
+ const c=db.clients.find(x=>x.id===cid)||{};
+ modal(cid?'編輯客戶':'新增客戶',`<form class="form" onsubmit="saveClient(event,'${cid}')">
+   <label>客戶／公司名稱 *</label><input name="name" required value="${c.name||''}">
+   <label>聯絡人</label><input name="contact" value="${c.contact||''}">
+   <label>聯絡電話</label><input name="phone" inputmode="tel" value="${c.phone||''}">
+   <label>LINE</label><input name="line" value="${c.line||''}">
+   <label>地址</label><input name="address" value="${c.address||''}">
+   <label>備註</label><textarea name="note">${c.note||''}</textarea>
+   <div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存客戶</button></div>
+ </form>`);
+}
+function saveClient(e,cid){
+ const x=formObj(e);
+ if(cid){
+   const c=db.clients.find(x=>x.id===cid);
+   Object.assign(c,x);
+ }else{
+   db.clients.push({id:id(),...x,created:Date.now()});
+ }
+ save(); closeModal(); showClients();
+}
+
+function showVendors(){
+ showPage('vendors');
+ renderVendors();
+}
+function renderVendors(){
+ const q=((document.getElementById('vendorSearch')||{}).value||'').trim().toLowerCase();
+ const arr=db.vendors.filter(v=>[v.name,v.trade,v.contact,v.phone,v.address].join(' ').toLowerCase().includes(q));
+ document.getElementById('vendorList').innerHTML=arr.length?arr.map(v=>{
+   const related=db.expenses.filter(x=>x.vendorId===v.id || (!x.vendorId && x.vendor===v.name));
+   const total=related.reduce((s,x)=>s+(+x.amount||0),0);
+   return `<div class="card">
+     <div class="row"><h3>${v.name}</h3><button class="linkbtn" onclick="openVendorForm('${v.id}')">編輯</button></div>
+     <div class="row"><span class="muted">工種</span><span>${v.trade||'—'}</span></div>
+     <div class="row"><span class="muted">聯絡人</span><span>${v.contact||'—'}</span></div>
+     <div class="row"><span class="muted">電話</span><span>${v.phone||'—'}</span></div>
+     <div class="row"><span class="muted">地址</span><span>${v.address||'—'}</span></div>
+     <div class="row"><span class="muted">累計支出</span><b>${money(total)}</b></div>
+   </div>`;
+ }).join(''):'<div class="empty">目前沒有符合的廠商資料</div>';
+}
+function openVendorForm(vid=''){
+ const v=db.vendors.find(x=>x.id===vid)||{};
+ modal(vid?'編輯廠商':'新增廠商',`<form class="form" onsubmit="saveVendor(event,'${vid}')">
+   <label>廠商名稱 *</label><input name="name" required value="${v.name||''}">
+   <label>工種／類別</label><input name="trade" placeholder="例如：木工、水電、油漆、代工" value="${v.trade||''}">
+   <label>聯絡人</label><input name="contact" value="${v.contact||''}">
+   <label>聯絡電話</label><input name="phone" inputmode="tel" value="${v.phone||''}">
+   <label>地址</label><input name="address" value="${v.address||''}">
+   <label>備註</label><textarea name="note">${v.note||''}</textarea>
+   <div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存廠商</button></div>
+ </form>`);
+}
+function saveVendor(e,vid){
+ const x=formObj(e);
+ if(vid){
+   const v=db.vendors.find(x=>x.id===vid);
+   Object.assign(v,x);
+ }else{
+   db.vendors.push({id:id(),...x,created:Date.now()});
+ }
+ save(); closeModal(); showVendors();
+}
+
 function resetData(){
- if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[]};save();showPage('home')}
+ if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[]};save();showPage('home')}
 }
 
 // iPhone / 手機鍵盤開啟時，讓正在輸入的欄位自動滑到可見位置
