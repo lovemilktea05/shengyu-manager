@@ -136,6 +136,15 @@ main{padding:14px}
     <div class="row"><span>帳號權限／雲端同步</span><span class="muted">正式版接入</span></div>
   </div>
   <div class="card">
+    <h3>資料備份</h3>
+    <p class="muted">可將目前工程、收款、支出與進度資料匯出成備份檔，需要時再匯入還原。</p>
+    <div class="actions">
+      <button class="primary" onclick="exportBackup()">下載備份</button>
+      <button class="secondary" onclick="document.getElementById('backupInput').click()">匯入備份</button>
+    </div>
+    <input id="backupInput" type="file" accept=".json,application/json" style="display:none" onchange="importBackup(event)">
+  </div>
+  <div class="card">
     <h3>資料管理</h3>
     <p class="muted">目前資料儲存在這支手機的瀏覽器內。</p>
     <button class="danger" onclick="resetData()">清除全部測試資料</button>
@@ -222,7 +231,7 @@ function openQuick(type){
  if(type==='expense'){
   modal('新增支出',`<form class="form" onsubmit="addExpense(event)">
    <label>工程 *</label><select name="projectId" required>${projectOptions()}</select>
-   <label>類別</label><select name="type"><option>材料</option><option>工資</option><option>外包</option><option>運費</option><option>雜支</option></select>
+   <label>類別</label><select name="type"><option>材料</option><option>工資</option><option>外包</option><option>代工</option><option>運費</option><option>雜支</option></select>
    <label>廠商／對象</label><input name="vendor">
    <label>金額 *</label><input name="amount" type="number" inputmode="numeric" min="0" required>
    <label>支出日期</label><input name="date" type="date" value="${today()}">
@@ -286,6 +295,7 @@ function openProject(pid){
   <div class="row"><span class="muted">負責人</span><span>${p.owner||'—'}</span></div>
   <div class="row"><span class="muted">開工</span><span>${p.start||'—'}</span></div>
   <div class="row"><span class="muted">預計完工</span><span>${p.end||'—'}</span></div>
+  <div class="row"><span class="muted">工程狀態</span><span><b>${p.status}</b> <button class="linkbtn" onclick="editProjectStatus('${p.id}')">變更</button></span></div>
   <div class="row"><span class="muted">目前進度</span><b>${t.progress}%</b></div>
   <div class="progress"><i style="width:${t.progress}%"></i></div>
  </div>
@@ -319,6 +329,55 @@ function renderAll(){
  ].sort((a,b)=>b.created-a.created).slice(0,5);
  document.getElementById('recentLogs').innerHTML=logs.length?logs.map(x=>`<div class="card"><div class="row"><span>${x.text}</span>${x.amt===null?'':`<b>${x.amt<0?'-':''}${money(Math.abs(x.amt))}</b>`}</div></div>`).join(''):'<div class="empty">還沒有紀錄</div>';
 }
+
+function editProjectStatus(pid){
+ const p=db.projects.find(x=>x.id===pid); if(!p)return;
+ modal('變更工程狀態',`<form class="form" onsubmit="saveProjectStatus(event,'${pid}')">
+   <label>工程名稱</label><input value="${p.name}" disabled>
+   <label>工程狀態</label>
+   <select name="status">
+     <option ${p.status==='洽談中'?'selected':''}>洽談中</option>
+     <option ${p.status==='施工中'?'selected':''}>施工中</option>
+     <option ${p.status==='完工'?'selected':''}>完工</option>
+     <option ${p.status==='保固中'?'selected':''}>保固中</option>
+   </select>
+   <div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存狀態</button></div>
+ </form>`);
+}
+function saveProjectStatus(e,pid){
+ const x=formObj(e);
+ const p=db.projects.find(x=>x.id===pid); if(!p)return;
+ p.status=x.status;
+ save(); closeModal(); openProject(pid);
+}
+function exportBackup(){
+ const payload={app:'盛昱室內裝修公司管理系統',version:1,exportedAt:new Date().toISOString(),data:db};
+ const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement('a');
+ const d=new Date();
+ const date=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+ a.href=url; a.download='盛昱管理系統備份_'+date+'.json';
+ document.body.appendChild(a); a.click(); a.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function importBackup(event){
+ const file=event.target.files && event.target.files[0]; if(!file)return;
+ const reader=new FileReader();
+ reader.onload=function(){
+   try{
+     const parsed=JSON.parse(reader.result); const incoming=parsed.data || parsed;
+     if(!incoming || !Array.isArray(incoming.projects) || !Array.isArray(incoming.incomes) || !Array.isArray(incoming.expenses) || !Array.isArray(incoming.progress)) throw new Error('格式不正確');
+     if(confirm('匯入備份會覆蓋目前這支手機內的資料，確定要繼續嗎？')){
+       db={projects:incoming.projects||[],incomes:incoming.incomes||[],expenses:incoming.expenses||[],progress:incoming.progress||[]};
+       save(); alert('備份已成功還原。'); showPage('home');
+     }
+   }catch(err){ alert('這個備份檔無法讀取，請確認是由本系統匯出的 JSON 備份檔。'); }
+   finally{ event.target.value=''; }
+ };
+ reader.readAsText(file);
+}
+
 function resetData(){
  if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[]};save();showPage('home')}
 }
