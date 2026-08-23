@@ -1,0 +1,16 @@
+{
+  "name": "盛昱室內裝修有限公司管理系統",
+  "short_name": "盛昱管理",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#f5f6f8",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
