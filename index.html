@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="1787470580">
+<meta name="app-version" content="1787471114">
 
 <title>盛昱室內裝修有限公司｜公司管理系統</title>
 <style>
@@ -108,7 +108,7 @@ main{padding:14px}
 <div class="app">
 <header>
   <div class="brand">盛昱室內裝修有限公司</div>
-  <div class="sub">公司管理系統 V2｜手機版</div>
+  <div class="sub">公司管理系統 V3｜手機版</div>
 </header>
 
 <main>
@@ -251,9 +251,10 @@ main{padding:14px}
 
 <script>
 const LS='shengyu_manager_v1';
-let db=JSON.parse(localStorage.getItem(LS)||'{"projects":[],"incomes":[],"expenses":[],"progress":[],"clients":[],"vendors":[]}');
+let db=JSON.parse(localStorage.getItem(LS)||'{"projects":[],"incomes":[],"expenses":[],"progress":[],"clients":[],"vendors":[],"adjustments":[]}');
 db.clients=db.clients||[];
 db.vendors=db.vendors||[];
+db.adjustments=db.adjustments||[];
 let currentProjectId=null;
 let projectView='current';
 const save=()=>{localStorage.setItem(LS,JSON.stringify(db));renderAll();}
@@ -376,17 +377,23 @@ function addIncome(e){let x=formObj(e);db.incomes.push({id:id(),...x,amount:+x.a
 function addExpense(e){let x=formObj(e);db.expenses.push({id:id(),...x,amount:+x.amount||0,created:Date.now()});save();closeModal();if(currentProjectId) openProject(currentProjectId)}
 function addProgress(e){let x=formObj(e);db.progress.push({id:id(),...x,percent:+x.percent||0,created:Date.now()});save();closeModal();if(currentProjectId) openProject(currentProjectId)}
 function pTotals(pid){
- const income=db.incomes.filter(x=>x.projectId===pid).reduce((s,x)=>s+x.amount,0);
- const expense=db.expenses.filter(x=>x.projectId===pid).reduce((s,x)=>s+x.amount,0);
+ const p=db.projects.find(x=>x.id===pid);
+ const income=db.incomes.filter(x=>x.projectId===pid).reduce((s,x)=>s+(+x.amount||0),0);
+ const expense=db.expenses.filter(x=>x.projectId===pid).reduce((s,x)=>s+(+x.amount||0),0);
+ const adds=db.adjustments.filter(x=>x.projectId===pid && x.kind==='追加').reduce((s,x)=>s+(+x.amount||0),0);
+ const deductions=db.adjustments.filter(x=>x.projectId===pid && x.kind==='減項').reduce((s,x)=>s+(+x.amount||0),0);
+ const base=+(p&&p.contract)||0;
+ const adjusted=base+adds-deductions;
  const pr=[...db.progress].filter(x=>x.projectId===pid).sort((a,b)=>b.created-a.created)[0];
- return {income,expense,progress:pr?pr.percent:0};
+ return {income,expense,adds,deductions,base,adjusted,progress:pr?pr.percent:0};
 }
 function projectCard(p){
- const t=pTotals(p.id), due=Math.max(0,(+p.contract||0)-t.income);
+ const t=pTotals(p.id), due=Math.max(0,t.adjusted-t.income);
  return `<div class="card" onclick="openProject('${p.id}')">
   <div class="row"><h3>${p.name}</h3><span class="badge">${p.status}</span></div>
   <div class="row"><span class="muted">客戶</span><span>${p.client||'—'}</span></div>
-  <div class="row"><span class="muted">合約</span><b class="money">${money(p.contract)}</b></div>
+  <div class="row"><span class="muted">原合約</span><span class="money">${money(p.contract)}</span></div>
+  <div class="row"><span class="muted">調整後合約</span><b class="money">${money(t.adjusted)}</b></div>
   <div class="row"><span class="muted">已收 / 待收</span><span>${money(t.income)} / ${money(due)}</span></div>
   <div class="row"><span class="muted">累計支出</span><span>${money(t.expense)}</span></div>
   <div class="row"><span class="muted">工程進度</span><span>${t.progress}%</span></div>
@@ -396,15 +403,16 @@ function projectCard(p){
 function openProject(pid){
  currentProjectId=pid;
  const p=db.projects.find(x=>x.id===pid); if(!p)return;
- const t=pTotals(pid), due=Math.max(0,(+p.contract||0)-t.income);
+ const t=pTotals(pid), due=Math.max(0,t.adjusted-t.income);
  const inc=[...db.incomes].filter(x=>x.projectId===pid).sort((a,b)=>b.created-a.created);
  const exp=[...db.expenses].filter(x=>x.projectId===pid).sort((a,b)=>b.created-a.created);
  const prog=[...db.progress].filter(x=>x.projectId===pid).sort((a,b)=>b.created-a.created);
+ const adj=[...db.adjustments].filter(x=>x.projectId===pid).sort((a,b)=>b.created-a.created);
  document.getElementById('detailWrap').innerHTML=`
  <button class="linkbtn" onclick="setProjectView('${p.status==='已結案'?'history':'current'}');showPage('projects')">‹ 返回工程</button>
  <div class="detail-head"><h2>${p.name}</h2><div>${p.status}｜${p.client||'未填客戶'}</div></div>
  <div class="grid4">
-  <div class="stat"><div class="k">合約金額</div><div class="v">${money(p.contract)}</div></div>
+  <div class="stat"><div class="k">調整後合約</div><div class="v">${money(t.adjusted)}</div></div>
   <div class="stat"><div class="k">已收款</div><div class="v">${money(t.income)}</div></div>
   <div class="stat"><div class="k">待收款</div><div class="v">${money(due)}</div></div>
   <div class="stat"><div class="k">累計支出</div><div class="v">${money(t.expense)}</div></div>
@@ -416,6 +424,10 @@ function openProject(pid){
   <div class="row"><span class="muted">開工</span><span>${p.start||'—'}</span></div>
   <div class="row"><span class="muted">預計完工</span><span>${p.end||'—'}</span></div>
   <div class="row"><span class="muted">工程狀態</span><span><b>${p.status}</b> <button class="linkbtn" onclick="editProjectStatus('${p.id}')">變更</button></span></div>
+  <div class="row"><span class="muted">原合約金額</span><span>${money(t.base)}</span></div>
+  <div class="row"><span class="muted">追加工程</span><span>＋${money(t.adds)}</span></div>
+  <div class="row"><span class="muted">減項工程</span><span>－${money(t.deductions)}</span></div>
+  <div class="row"><span class="muted">調整後合約</span><b>${money(t.adjusted)}</b></div>
   <div class="row"><span class="muted">目前進度</span><b>${t.progress}%</b></div>
   <div class="progress"><i style="width:${t.progress}%"></i></div>
  </div>
@@ -424,6 +436,13 @@ function openProject(pid){
   <button class="qbtn" onclick="openQuick('expense')">＋支出</button>
   <button class="qbtn" onclick="openQuick('progress')">＋進度</button>
  </div>
+ <button class="primary" style="width:100%;margin-bottom:10px" onclick="openAdjustment('${p.id}')">＋追加／減項工程</button>
+ <div class="section-title"><h2>追加／減項工程</h2></div>
+ ${adj.length?adj.map(x=>`<div class="card">
+   <div class="row"><b>${x.kind}｜${x.title||'未命名項目'}</b><b>${x.kind==='追加'?'+':'-'}${money(x.amount)}</b></div>
+   <div class="muted">${x.date||''}${x.note?'｜'+x.note:''}</div>
+   <div style="text-align:right;margin-top:8px"><button class="linkbtn" onclick="event.stopPropagation();deleteAdjustment('${x.id}','${pid}')">刪除</button></div>
+ </div>`).join(''):'<div class="empty">尚無追加／減項紀錄</div>'}
  <div class="section-title"><h2>最近收款</h2></div>${inc.length?inc.slice(0,5).map(x=>`<div class="card"><div class="row"><b>${x.type}</b><b>${money(x.amount)}</b></div><div class="muted">${x.date||''} ${x.note||''}</div></div>`).join(''):'<div class="empty">尚無收款紀錄</div>'}
  <div class="section-title"><h2>最近支出</h2></div>${exp.length?exp.slice(0,5).map(x=>`<div class="card"><div class="row"><b>${x.type}${x.vendor?'｜'+x.vendor:''}</b><b>${money(x.amount)}</b></div><div class="muted">${x.date||''} ${x.note||''}</div></div>`).join(''):'<div class="empty">尚無支出紀錄</div>'}
  <div class="section-title"><h2>工程進度</h2></div>${prog.length?prog.slice(0,5).map(x=>`<div class="card"><div class="row"><b>${x.percent}%</b><span>${x.date||''}</span></div><div>${x.done||'—'}</div>${x.next?`<div class="muted" style="margin-top:6px">下一步：${x.next}</div>`:''}</div>`).join(''):'<div class="empty">尚無進度紀錄</div>'}
@@ -436,7 +455,7 @@ function renderAll(){
  const m=thisMonth();
  const income=db.incomes.filter(x=>ym(x.date)===m).reduce((s,x)=>s+x.amount,0);
  const expense=db.expenses.filter(x=>ym(x.date)===m).reduce((s,x)=>s+x.amount,0);
- const due=db.projects.reduce((s,p)=>s+Math.max(0,(+p.contract||0)-pTotals(p.id).income),0);
+ const due=db.projects.reduce((s,p)=>{const t=pTotals(p.id);return s+Math.max(0,t.adjusted-t.income)},0);
  document.getElementById('statIncome').textContent=money(income);
  document.getElementById('statExpense').textContent=money(expense);
  document.getElementById('statDue').textContent=money(due);
@@ -455,6 +474,52 @@ function renderAll(){
   ...db.progress.map(x=>({created:x.created,text:'進度｜'+(db.projects.find(p=>p.id===x.projectId)?.name||'工程')+' '+x.percent+'%',amt:null}))
  ].sort((a,b)=>b.created-a.created).slice(0,5);
  document.getElementById('recentLogs').innerHTML=logs.length?logs.map(x=>`<div class="card"><div class="row"><span>${x.text}</span>${x.amt===null?'':`<b>${x.amt<0?'-':''}${money(Math.abs(x.amt))}</b>`}</div></div>`).join(''):'<div class="empty">還沒有紀錄</div>';
+}
+
+
+function openAdjustment(pid){
+ const p=db.projects.find(x=>x.id===pid); if(!p)return;
+ modal('追加／減項工程',`<form class="form" onsubmit="saveAdjustment(event,'${pid}')">
+   <label>類型 *</label>
+   <select name="kind" required>
+     <option value="追加">追加工程</option>
+     <option value="減項">減項工程</option>
+   </select>
+   <label>項目名稱 *</label>
+   <input name="title" required placeholder="例如：追加系統櫃">
+   <label>金額 *</label>
+   <input name="amount" type="number" inputmode="numeric" min="0" required>
+   <label>日期</label>
+   <input name="date" type="date" value="${today()}">
+   <label>備註</label>
+   <textarea name="note" placeholder="可記錄客戶確認內容、原因等"></textarea>
+   <div class="actions">
+     <button type="button" class="secondary" onclick="closeModal()">取消</button>
+     <button class="primary">儲存</button>
+   </div>
+ </form>`);
+}
+function saveAdjustment(e,pid){
+ const x=formObj(e);
+ db.adjustments.push({
+   id:id(),
+   projectId:pid,
+   kind:x.kind,
+   title:x.title,
+   amount:+x.amount||0,
+   date:x.date,
+   note:x.note||'',
+   created:Date.now()
+ });
+ save();
+ closeModal();
+ openProject(pid);
+}
+function deleteAdjustment(aid,pid){
+ if(!confirm('確定刪除這筆追加／減項紀錄嗎？')) return;
+ db.adjustments=db.adjustments.filter(x=>x.id!==aid);
+ save();
+ openProject(pid);
 }
 
 function editProjectStatus(pid){
@@ -498,7 +563,15 @@ function importBackup(event){
      const parsed=JSON.parse(reader.result); const incoming=parsed.data || parsed;
      if(!incoming || !Array.isArray(incoming.projects) || !Array.isArray(incoming.incomes) || !Array.isArray(incoming.expenses) || !Array.isArray(incoming.progress)) throw new Error('格式不正確');
      if(confirm('匯入備份會覆蓋目前這支手機內的資料，確定要繼續嗎？')){
-       db={projects:incoming.projects||[],incomes:incoming.incomes||[],expenses:incoming.expenses||[],progress:incoming.progress||[]};
+       db={
+         projects:incoming.projects||[],
+         incomes:incoming.incomes||[],
+         expenses:incoming.expenses||[],
+         progress:incoming.progress||[],
+         clients:incoming.clients||[],
+         vendors:incoming.vendors||[],
+         adjustments:incoming.adjustments||[]
+       };
        save(); alert('備份已成功還原。'); showPage('home');
      }
    }catch(err){ alert('這個備份檔無法讀取，請確認是由本系統匯出的 JSON 備份檔。'); }
@@ -543,7 +616,7 @@ function renderYearEnd(){
  const incomes=db.incomes.filter(x=>(x.date||'').slice(0,4)===y);
  const expenses=db.expenses.filter(x=>(x.date||'').slice(0,4)===y);
 
- const contract=yearProjects.reduce((s,p)=>s+(+p.contract||0),0);
+ const contract=yearProjects.reduce((s,p)=>s+pTotals(p.id).adjusted,0);
  const income=incomes.reduce((s,x)=>s+(+x.amount||0),0);
  const expense=expenses.reduce((s,x)=>s+(+x.amount||0),0);
  const balance=income-expense;
@@ -551,7 +624,7 @@ function renderYearEnd(){
  // "目前未收款" is current outstanding, not a historical year-end snapshot.
  const due=yearProjects.reduce((s,p)=>{
    const allIncome=db.incomes.filter(x=>x.projectId===p.id).reduce((a,x)=>a+(+x.amount||0),0);
-   return s+Math.max(0,(+p.contract||0)-allIncome);
+   return s+Math.max(0,pTotals(p.id).adjusted-allIncome);
  },0);
 
  document.getElementById('yeProjects').textContent=yearProjects.length;
@@ -673,7 +746,7 @@ function saveVendor(e,vid){
 }
 
 function resetData(){
- if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[]};save();showPage('home')}
+ if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[],adjustments:[]};save();showPage('home')}
 }
 
 // iPhone / 手機鍵盤開啟時，讓正在輸入的欄位自動滑到可見位置
@@ -687,7 +760,7 @@ document.addEventListener('focusin', function(e){
 
 
 
-const APP_VERSION='1787470580';
+const APP_VERSION='1787471114';
 
 async function registerUpdater(){
   if(!('serviceWorker' in navigator) || location.protocol==='file:') return;
