@@ -140,12 +140,43 @@ main{padding:14px}
   <div id="detailWrap"></div>
 </section>
 
+<section id="yearEnd" class="page">
+  <div class="section-title">
+    <h2>年底總結算</h2>
+    <button class="linkbtn" onclick="showPage('more')">返回</button>
+  </div>
+
+  <div class="card">
+    <label class="muted" style="display:block;margin-bottom:6px">結算年度</label>
+    <select id="yearEndSelect" onchange="renderYearEnd()" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;background:white"></select>
+  </div>
+
+  <div class="grid4">
+    <div class="stat"><div class="k">年度工程</div><div class="v" id="yeProjects">0</div></div>
+    <div class="stat"><div class="k">年度合約總額</div><div class="v money" id="yeContract">$0</div></div>
+    <div class="stat"><div class="k">年度總收款</div><div class="v money" id="yeIncome">$0</div></div>
+    <div class="stat"><div class="k">年度總支出</div><div class="v money" id="yeExpense">$0</div></div>
+  </div>
+
+  <div class="card" style="margin-top:10px">
+    <div class="row"><span class="muted">年度收支結餘</span><b class="money" id="yeBalance">$0</b></div>
+    <div class="row"><span class="muted">目前未收款</span><b class="money" id="yeDue">$0</b></div>
+  </div>
+
+  <div class="section-title"><h2>各工程年度明細</h2></div>
+  <div id="yearEndProjectList"></div>
+</section>
+
 <section id="more" class="page">
   <div class="section-title"><h2>更多功能</h2></div>
   <div class="card">
     <div class="row"><span>客戶管理</span><span class="muted">下一版擴充</span></div>
     <div class="row"><span>廠商管理</span><span class="muted">下一版擴充</span></div>
     <div class="row"><span>照片與文件</span><span class="muted">下一版擴充</span></div>
+    <div class="row" style="align-items:center">
+      <span><b>年底總結算</b><br><span class="muted">年度工程、收款、支出與結餘</span></span>
+      <button class="linkbtn" onclick="showYearEnd()">查看</button>
+    </div>
     <div class="row"><span>帳號權限／雲端同步</span><span class="muted">正式版接入</span></div>
   </div>
   <div class="card">
@@ -410,6 +441,84 @@ function importBackup(event){
    finally{ event.target.value=''; }
  };
  reader.readAsText(file);
+}
+
+
+function getYearOptions(){
+ const years=new Set();
+ const nowYear=new Date().getFullYear();
+ years.add(nowYear);
+ db.projects.forEach(p=>{
+   const d=(p.start||'').slice(0,4);
+   if(d) years.add(+d);
+   else if(p.created) years.add(new Date(p.created).getFullYear());
+ });
+ db.incomes.forEach(x=>{ const y=(x.date||'').slice(0,4); if(y) years.add(+y); });
+ db.expenses.forEach(x=>{ const y=(x.date||'').slice(0,4); if(y) years.add(+y); });
+ return [...years].filter(Boolean).sort((a,b)=>b-a);
+}
+function showYearEnd(){
+ showPage('yearEnd');
+ const sel=document.getElementById('yearEndSelect');
+ const years=getYearOptions();
+ const current=sel.value || String(new Date().getFullYear());
+ sel.innerHTML=years.map(y=>`<option value="${y}" ${String(y)===current?'selected':''}>${y} 年</option>`).join('');
+ if(!sel.value && years.length) sel.value=years[0];
+ renderYearEnd();
+}
+function renderYearEnd(){
+ const sel=document.getElementById('yearEndSelect');
+ if(!sel) return;
+ const y=String(sel.value || new Date().getFullYear());
+
+ const yearProjects=db.projects.filter(p=>{
+   const py=(p.start||'').slice(0,4) || (p.created?String(new Date(p.created).getFullYear()):'');
+   return py===y;
+ });
+
+ const incomes=db.incomes.filter(x=>(x.date||'').slice(0,4)===y);
+ const expenses=db.expenses.filter(x=>(x.date||'').slice(0,4)===y);
+
+ const contract=yearProjects.reduce((s,p)=>s+(+p.contract||0),0);
+ const income=incomes.reduce((s,x)=>s+(+x.amount||0),0);
+ const expense=expenses.reduce((s,x)=>s+(+x.amount||0),0);
+ const balance=income-expense;
+
+ // "目前未收款" is current outstanding, not a historical year-end snapshot.
+ const due=yearProjects.reduce((s,p)=>{
+   const allIncome=db.incomes.filter(x=>x.projectId===p.id).reduce((a,x)=>a+(+x.amount||0),0);
+   return s+Math.max(0,(+p.contract||0)-allIncome);
+ },0);
+
+ document.getElementById('yeProjects').textContent=yearProjects.length;
+ document.getElementById('yeContract').textContent=money(contract);
+ document.getElementById('yeIncome').textContent=money(income);
+ document.getElementById('yeExpense').textContent=money(expense);
+ document.getElementById('yeBalance').textContent=(balance<0?'-':'')+money(Math.abs(balance));
+ document.getElementById('yeDue').textContent=money(due);
+
+ const projectIds=new Set([
+   ...yearProjects.map(p=>p.id),
+   ...incomes.map(x=>x.projectId),
+   ...expenses.map(x=>x.projectId)
+ ]);
+
+ const rows=[...projectIds].map(pid=>{
+   const p=db.projects.find(x=>x.id===pid);
+   if(!p) return null;
+   const inc=incomes.filter(x=>x.projectId===pid).reduce((s,x)=>s+(+x.amount||0),0);
+   const exp=expenses.filter(x=>x.projectId===pid).reduce((s,x)=>s+(+x.amount||0),0);
+   return {p,inc,exp,bal:inc-exp};
+ }).filter(Boolean).sort((a,b)=>(b.inc+b.exp)-(a.inc+a.exp));
+
+ document.getElementById('yearEndProjectList').innerHTML=rows.length?rows.map(r=>`
+   <div class="card" onclick="openProject('${r.p.id}')">
+     <div class="row"><h3>${r.p.name}</h3><span class="badge">${r.p.status}</span></div>
+     <div class="row"><span class="muted">年度收款</span><b>${money(r.inc)}</b></div>
+     <div class="row"><span class="muted">年度支出</span><b>${money(r.exp)}</b></div>
+     <div class="row"><span class="muted">年度結餘</span><b>${r.bal<0?'-':''}${money(Math.abs(r.bal))}</b></div>
+   </div>
+ `).join(''):'<div class="empty">這個年度目前沒有可結算資料</div>';
 }
 
 function resetData(){
