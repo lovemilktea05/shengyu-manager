@@ -3,6 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<meta name="app-version" content="1787470126">
+
 <title>盛昱室內裝修有限公司｜公司管理系統</title>
 <style>
 :root{
@@ -531,6 +537,33 @@ document.addEventListener('focusin', function(e){
   setTimeout(function(){
     e.target.scrollIntoView({behavior:'smooth', block:'center'});
   }, 250);
+});
+
+
+const APP_VERSION='1787470126';
+
+async function checkForAppUpdate(){
+  if(!navigator.onLine || location.protocol==='file:') return;
+  try{
+    const url=new URL(location.href);
+    url.searchParams.set('_fresh',Date.now());
+    const res=await fetch(url.toString(),{cache:'no-store',headers:{'Cache-Control':'no-cache'}});
+    if(!res.ok) return;
+    const text=await res.text();
+    const match=text.match(/<meta name="app-version" content="([^"]+)">/);
+    const remoteVersion=match && match[1];
+    if(remoteVersion && remoteVersion!==APP_VERSION){
+      const reloadUrl=new URL(location.href);
+      reloadUrl.searchParams.set('_v',remoteVersion);
+      location.replace(reloadUrl.toString());
+    }
+  }catch(e){
+    // Offline or transient network failure: keep current app usable.
+  }
+}
+window.addEventListener('pageshow',()=>setTimeout(checkForAppUpdate,300));
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible') setTimeout(checkForAppUpdate,300);
 });
 
 renderAll();
