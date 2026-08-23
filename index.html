@@ -120,6 +120,10 @@ main{padding:14px}
 
 <section id="projects" class="page">
   <div class="section-title"><h2>工程案件</h2><button class="linkbtn" onclick="openQuick('project')">＋新增</button></div>
+  <div class="tabs">
+    <button id="tabCurrent" class="tab active" onclick="setProjectView('current')">目前案件</button>
+    <button id="tabHistory" class="tab" onclick="setProjectView('history')">歷史資料</button>
+  </div>
   <div id="projectList"></div>
 </section>
 
@@ -173,6 +177,7 @@ main{padding:14px}
 const LS='shengyu_manager_v1';
 let db=JSON.parse(localStorage.getItem(LS)||'{"projects":[],"incomes":[],"expenses":[],"progress":[]}');
 let currentProjectId=null;
+let projectView='current';
 const save=()=>{localStorage.setItem(LS,JSON.stringify(db));renderAll();}
 const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const money=n=>'$'+Number(n||0).toLocaleString('zh-TW');
@@ -188,6 +193,17 @@ function showPage(p){
  window.scrollTo({top:0,behavior:'smooth'});
 }
 function closeModal(){document.getElementById('modal').classList.remove('open')}
+function setProjectView(view){
+ projectView=view;
+ const c=document.getElementById('tabCurrent');
+ const h=document.getElementById('tabHistory');
+ if(c&&h){
+   c.classList.toggle('active',view==='current');
+   h.classList.toggle('active',view==='history');
+ }
+ renderAll();
+}
+
 function modal(title,html){document.getElementById('modalTitle').textContent=title;document.getElementById('modalBody').innerHTML=html;document.getElementById('modal').classList.add('open')}
 function projectOptions(){
  return db.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
@@ -211,10 +227,8 @@ function openQuick(type){
    <label>合約金額</label><input name="contract" inputmode="numeric" type="number" min="0">
    <label>開工日期</label><input name="start" type="date">
    <label>預計完工日期</label><input name="end" type="date">
-   <label>實際完工日期</label><input name="completionDate" type="date">
-   <label>保固期間（月）</label><input name="warrantyMonths" type="number" min="1" inputmode="numeric" value="12">
    <label>負責人</label><input name="owner">
-   <label>工程狀態</label><select name="status"><option>洽談中</option><option selected>施工中</option><option>完工</option><option>保固中</option></select>
+   <label>工程狀態</label><select name="status"><option>洽談中</option><option selected>施工中</option><option>完工</option><option>保固中</option><option>已結案</option></select>
    <label>備註</label><textarea name="note"></textarea>
    <div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存工程</button></div>
   </form>`); return;
@@ -253,7 +267,7 @@ function openQuick(type){
  }
 }
 function formObj(e){e.preventDefault();return Object.fromEntries(new FormData(e.target).entries())}
-function addProject(e){let x=formObj(e);db.projects.push({id:id(),...x,contract:+x.contract||0,warrantyMonths:+x.warrantyMonths||12,created:Date.now()});save();closeModal();showPage('projects')}
+function addProject(e){let x=formObj(e);db.projects.push({id:id(),...x,contract:+x.contract||0,created:Date.now()});save();closeModal();showPage('projects')}
 function addIncome(e){let x=formObj(e);db.incomes.push({id:id(),...x,amount:+x.amount||0,created:Date.now()});save();closeModal();if(currentProjectId) openProject(currentProjectId)}
 function addExpense(e){let x=formObj(e);db.expenses.push({id:id(),...x,amount:+x.amount||0,created:Date.now()});save();closeModal();if(currentProjectId) openProject(currentProjectId)}
 function addProgress(e){let x=formObj(e);db.progress.push({id:id(),...x,percent:+x.percent||0,created:Date.now()});save();closeModal();if(currentProjectId) openProject(currentProjectId)}
@@ -283,7 +297,7 @@ function openProject(pid){
  const exp=[...db.expenses].filter(x=>x.projectId===pid).sort((a,b)=>b.created-a.created);
  const prog=[...db.progress].filter(x=>x.projectId===pid).sort((a,b)=>b.created-a.created);
  document.getElementById('detailWrap').innerHTML=`
- <button class="linkbtn" onclick="showPage('projects')">‹ 返回工程</button>
+ <button class="linkbtn" onclick="setProjectView('${p.status==='已結案'?'history':'current'}');showPage('projects')">‹ 返回工程</button>
  <div class="detail-head"><h2>${p.name}</h2><div>${p.status}｜${p.client||'未填客戶'}</div></div>
  <div class="grid4">
   <div class="stat"><div class="k">合約金額</div><div class="v">${money(p.contract)}</div></div>
@@ -291,15 +305,12 @@ function openProject(pid){
   <div class="stat"><div class="k">待收款</div><div class="v">${money(due)}</div></div>
   <div class="stat"><div class="k">累計支出</div><div class="v">${money(t.expense)}</div></div>
  </div>
- <div class="section-title"><h2>工程資料</h2><button class="linkbtn" onclick="editProjectData('${p.id}')">編輯資料</button></div>
+ <div class="section-title"><h2>工程資料</h2></div>
  <div class="card">
   <div class="row"><span class="muted">地址</span><span>${p.address||'—'}</span></div>
   <div class="row"><span class="muted">負責人</span><span>${p.owner||'—'}</span></div>
   <div class="row"><span class="muted">開工</span><span>${p.start||'—'}</span></div>
   <div class="row"><span class="muted">預計完工</span><span>${p.end||'—'}</span></div>
-  <div class="row"><span class="muted">實際完工</span><span>${p.completionDate||'—'}</span></div>
-  <div class="row"><span class="muted">保固期間</span><span>${p.completionDate ? ((+p.warrantyMonths||12)+' 個月') : '—'}</span></div>
-  <div class="row"><span class="muted">保固到期</span><span>${p.completionDate ? calcWarrantyEnd(p.completionDate,+p.warrantyMonths||12) : '—'}</span></div>
   <div class="row"><span class="muted">工程狀態</span><span><b>${p.status}</b> <button class="linkbtn" onclick="editProjectStatus('${p.id}')">變更</button></span></div>
   <div class="row"><span class="muted">目前進度</span><b>${t.progress}%</b></div>
   <div class="progress"><i style="width:${t.progress}%"></i></div>
@@ -326,7 +337,14 @@ function renderAll(){
  document.getElementById('statExpense').textContent=money(expense);
  document.getElementById('statDue').textContent=money(due);
  document.getElementById('homeProjects').innerHTML=active.length?active.slice(0,4).map(projectCard).join(''):'<div class="empty">尚未建立施工中工程</div>';
- document.getElementById('projectList').innerHTML=db.projects.length?db.projects.slice().sort((a,b)=>b.created-a.created).map(projectCard).join(''):'<div class="empty">尚未建立工程<br><br><button class="primary" onclick="openQuick(\'project\')">建立第一個工程</button></div>';
+ const currentProjects=db.projects.filter(p=>p.status!=='已結案');
+ const historyProjects=db.projects.filter(p=>p.status==='已結案');
+ const shownProjects=projectView==='history'?historyProjects:currentProjects;
+ document.getElementById('projectList').innerHTML=shownProjects.length
+   ?shownProjects.slice().sort((a,b)=>b.created-a.created).map(projectCard).join('')
+   :(projectView==='history'
+      ?'<div class="empty">目前沒有已結案的歷史工程</div>'
+      :'<div class="empty">尚未建立目前案件<br><br><button class="primary" onclick="openQuick(\'project\')">建立第一個工程</button></div>');
  const logs=[
   ...db.incomes.map(x=>({created:x.created,text:'收款｜'+(db.projects.find(p=>p.id===x.projectId)?.name||'工程'),amt:x.amount})),
   ...db.expenses.map(x=>({created:x.created,text:'支出｜'+(db.projects.find(p=>p.id===x.projectId)?.name||'工程'),amt:-x.amount})),
@@ -335,50 +353,6 @@ function renderAll(){
  document.getElementById('recentLogs').innerHTML=logs.length?logs.map(x=>`<div class="card"><div class="row"><span>${x.text}</span>${x.amt===null?'':`<b>${x.amt<0?'-':''}${money(Math.abs(x.amt))}</b>`}</div></div>`).join(''):'<div class="empty">還沒有紀錄</div>';
 }
 
-function esc(v){return String(v??'').replace(/&/g,'&amp;').replace(/\"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-function calcWarrantyEnd(dateStr,months){
- if(!dateStr)return '';
- const parts=dateStr.split('-').map(Number);
- if(parts.length!==3)return '';
- const d=new Date(Date.UTC(parts[0],parts[1]-1,parts[2]));
- const originalDay=d.getUTCDate();
- d.setUTCDate(1);
- d.setUTCMonth(d.getUTCMonth()+(+months||12));
- const lastDay=new Date(Date.UTC(d.getUTCFullYear(),d.getUTCMonth()+1,0)).getUTCDate();
- d.setUTCDate(Math.min(originalDay,lastDay));
- return d.toISOString().slice(0,10);
-}
-function editProjectData(pid){
- const p=db.projects.find(x=>x.id===pid); if(!p)return;
- modal('編輯工程資料',`<form class="form" onsubmit="saveProjectData(event,'${pid}')">
-   <label>工程名稱 *</label><input name="name" required value="${esc(p.name)}">
-   <label>客戶／公司名稱</label><input name="client" value="${esc(p.client)}">
-   <label>聯絡人</label><input name="contact" value="${esc(p.contact)}">
-   <label>聯絡電話</label><input name="phone" inputmode="tel" value="${esc(p.phone)}">
-   <label>工程地址</label><input name="address" value="${esc(p.address)}">
-   <label>合約金額</label><input name="contract" inputmode="numeric" type="number" min="0" value="${+p.contract||0}">
-   <label>開工日期</label><input name="start" type="date" value="${esc(p.start)}">
-   <label>預計完工日期</label><input name="end" type="date" value="${esc(p.end)}">
-   <label>實際完工日期</label><input name="completionDate" type="date" value="${esc(p.completionDate)}">
-   <label>保固期間（月）</label><input name="warrantyMonths" type="number" min="1" inputmode="numeric" value="${+p.warrantyMonths||12}">
-   <div class="muted" style="margin-top:6px">填入實際完工日後，系統會從該日開始計算保固期限。</div>
-   <label>負責人</label><input name="owner" value="${esc(p.owner)}">
-   <label>工程狀態</label><select name="status">
-     <option ${p.status==='洽談中'?'selected':''}>洽談中</option>
-     <option ${p.status==='施工中'?'selected':''}>施工中</option>
-     <option ${p.status==='完工'?'selected':''}>完工</option>
-     <option ${p.status==='保固中'?'selected':''}>保固中</option>
-   </select>
-   <label>備註</label><textarea name="note">${esc(p.note)}</textarea>
-   <div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存修改</button></div>
- </form>`);
-}
-function saveProjectData(e,pid){
- const x=formObj(e);
- const p=db.projects.find(x=>x.id===pid); if(!p)return;
- Object.assign(p,x,{contract:+x.contract||0,warrantyMonths:+x.warrantyMonths||12});
- save(); closeModal(); openProject(pid);
-}
 function editProjectStatus(pid){
  const p=db.projects.find(x=>x.id===pid); if(!p)return;
  modal('變更工程狀態',`<form class="form" onsubmit="saveProjectStatus(event,'${pid}')">
@@ -389,10 +363,8 @@ function editProjectStatus(pid){
      <option ${p.status==='施工中'?'selected':''}>施工中</option>
      <option ${p.status==='完工'?'selected':''}>完工</option>
      <option ${p.status==='保固中'?'selected':''}>保固中</option>
+     <option ${p.status==='已結案'?'selected':''}>已結案</option>
    </select>
-   <label>實際完工日期</label><input name="completionDate" type="date" value="${p.completionDate||''}">
-   <label>保固期間（月）</label><input name="warrantyMonths" type="number" min="1" value="${+p.warrantyMonths||12}">
-   <div class="muted" style="margin-top:6px">填入實際完工日後，即由該日開始計算保固。</div>
    <div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存狀態</button></div>
  </form>`);
 }
@@ -400,8 +372,7 @@ function saveProjectStatus(e,pid){
  const x=formObj(e);
  const p=db.projects.find(x=>x.id===pid); if(!p)return;
  p.status=x.status;
- p.completionDate=x.completionDate||p.completionDate||'';
- p.warrantyMonths=+x.warrantyMonths||p.warrantyMonths||12;
+ if(p.status==='已結案') projectView='history';
  save(); closeModal(); openProject(pid);
 }
 function exportBackup(){
