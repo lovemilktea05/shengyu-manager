@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="1787471114">
+<meta name="app-version" content="1787471473">
 
 <title>盛昱室內裝修有限公司｜公司管理系統</title>
 <style>
@@ -108,7 +108,7 @@ main{padding:14px}
 <div class="app">
 <header>
   <div class="brand">盛昱室內裝修有限公司</div>
-  <div class="sub">公司管理系統 V3｜手機版</div>
+  <div class="sub">公司管理系統 V5｜手機版</div>
 </header>
 
 <main>
@@ -128,6 +128,9 @@ main{padding:14px}
 
   <div class="section-title"><h2>進行中工程</h2><button class="linkbtn" onclick="showPage('projects')">查看全部</button></div>
   <div id="homeProjects"></div>
+
+  <div class="section-title"><h2>近期請款</h2></div>
+  <div id="upcomingPayments"></div>
 
   <div class="section-title"><h2>最近紀錄</h2></div>
   <div id="recentLogs"></div>
@@ -251,10 +254,12 @@ main{padding:14px}
 
 <script>
 const LS='shengyu_manager_v1';
-let db=JSON.parse(localStorage.getItem(LS)||'{"projects":[],"incomes":[],"expenses":[],"progress":[],"clients":[],"vendors":[],"adjustments":[]}');
+let db=JSON.parse(localStorage.getItem(LS)||'{"projects":[],"incomes":[],"expenses":[],"progress":[],"clients":[],"vendors":[],"adjustments":[],"quotes":[],"paymentPlans":[]}');
 db.clients=db.clients||[];
 db.vendors=db.vendors||[];
 db.adjustments=db.adjustments||[];
+db.quotes=db.quotes||[];
+db.paymentPlans=db.paymentPlans||[];
 let currentProjectId=null;
 let projectView='current';
 const save=()=>{localStorage.setItem(LS,JSON.stringify(db));renderAll();}
@@ -436,7 +441,22 @@ function openProject(pid){
   <button class="qbtn" onclick="openQuick('expense')">＋支出</button>
   <button class="qbtn" onclick="openQuick('progress')">＋進度</button>
  </div>
- <button class="primary" style="width:100%;margin-bottom:10px" onclick="openAdjustment('${p.id}')">＋追加／減項工程</button>
+ <div class="actions" style="margin-bottom:10px">
+   <button class="primary" onclick="openQuoteList('${p.id}')">報價管理</button>
+   <button class="primary" onclick="openAdjustment('${p.id}')">追加／減項</button>
+ </div>
+ <div class="section-title"><h2>請款進度</h2><button class="linkbtn" onclick="openPaymentPlanList('${p.id}')">查看全部</button></div>
+ ${renderProjectPaymentSummary(pid)}
+
+ <div class="section-title"><h2>報價</h2><button class="linkbtn" onclick="openQuoteList('${p.id}')">查看全部</button></div>
+ ${db.quotes.filter(q=>q.projectId===pid).length
+   ? db.quotes.filter(q=>q.projectId===pid).slice().sort((a,b)=>b.created-a.created).slice(0,2).map(q=>`
+     <div class="card" onclick="openQuote('${q.id}')">
+       <div class="row"><b>${q.title||'工程報價'}</b><span class="badge">${q.status||'草稿'}</span></div>
+       <div class="row"><span class="muted">報價總額</span><b>${money(quoteTotal(q))}</b></div>
+       <div class="muted">${q.date||''}</div>
+     </div>`).join('')
+   : '<div class="empty">尚無報價紀錄</div>'}
  <div class="section-title"><h2>追加／減項工程</h2></div>
  ${adj.length?adj.map(x=>`<div class="card">
    <div class="row"><b>${x.kind}｜${x.title||'未命名項目'}</b><b>${x.kind==='追加'?'+':'-'}${money(x.amount)}</b></div>
@@ -474,8 +494,315 @@ function renderAll(){
   ...db.progress.map(x=>({created:x.created,text:'進度｜'+(db.projects.find(p=>p.id===x.projectId)?.name||'工程')+' '+x.percent+'%',amt:null}))
  ].sort((a,b)=>b.created-a.created).slice(0,5);
  document.getElementById('recentLogs').innerHTML=logs.length?logs.map(x=>`<div class="card"><div class="row"><span>${x.text}</span>${x.amt===null?'':`<b>${x.amt<0?'-':''}${money(Math.abs(x.amt))}</b>`}</div></div>`).join(''):'<div class="empty">還沒有紀錄</div>';
+ renderUpcomingPayments();
 }
 
+
+
+
+function renderProjectPaymentSummary(pid){
+ const arr=db.paymentPlans.filter(x=>x.projectId===pid).slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+ if(!arr.length) return '<div class="empty">尚未建立請款計畫<br><br><button class="primary" onclick="openPaymentPlanForm(\\''+pid+'\\')">建立請款計畫</button></div>';
+ const total=arr.reduce((s,x)=>s+(+x.amount||0),0);
+ const received=arr.filter(x=>x.status==='已收款').reduce((s,x)=>s+(+x.amount||0),0);
+ const pending=total-received;
+ const upcoming=arr.filter(x=>x.status!=='已收款').slice(0,3);
+ return `
+   <div class="card">
+     <div class="row"><span class="muted">請款計畫總額</span><b>${money(total)}</b></div>
+     <div class="row"><span class="muted">已收</span><b>${money(received)}</b></div>
+     <div class="row"><span class="muted">尚未收</span><b>${money(pending)}</b></div>
+   </div>
+   ${upcoming.map(x=>`
+     <div class="card" onclick="openPaymentPlanList('${pid}')">
+       <div class="row"><b>${x.type||'請款'}</b><span class="badge">${x.status||'待請款'}</span></div>
+       <div class="row"><span class="muted">應收日期</span><span>${x.dueDate||'—'}</span></div>
+       <div class="row"><span class="muted">應收金額</span><b>${money(x.amount)}</b></div>
+     </div>
+   `).join('')}
+ `;
+}
+function openPaymentPlanList(pid){
+ const p=db.projects.find(x=>x.id===pid); if(!p)return;
+ const arr=db.paymentPlans.filter(x=>x.projectId===pid).slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''));
+ modal('請款進度',`
+   <div class="card">
+     <div class="row"><b>${p.name}</b><button class="linkbtn" onclick="openPaymentPlanForm('${pid}')">＋新增請款</button></div>
+   </div>
+   ${arr.length?arr.map(x=>`
+     <div class="card">
+       <div class="row"><b>${x.type||'請款'}</b><span class="badge">${x.status||'待請款'}</span></div>
+       <div class="row"><span class="muted">應收日期</span><span>${x.dueDate||'—'}</span></div>
+       <div class="row"><span class="muted">應收金額</span><b>${money(x.amount)}</b></div>
+       ${x.note?`<div class="muted">${x.note}</div>`:''}
+       <div class="actions">
+         <button class="secondary" onclick="openPaymentPlanForm('${pid}','${x.id}')">編輯</button>
+         ${x.status!=='已收款'?`<button class="primary" onclick="receivePaymentPlan('${x.id}')">登記收款</button>`:'<button class="secondary" disabled>已收款</button>'}
+       </div>
+     </div>
+   `).join(''):'<div class="empty">尚未建立請款計畫</div>'}
+ `);
+}
+function openPaymentPlanForm(pid,planId=''){
+ const x=db.paymentPlans.find(p=>p.id===planId)||{
+   projectId:pid,type:'訂金',amount:0,dueDate:today(),status:'待請款',note:''
+ };
+ modal(planId?'編輯請款':'新增請款',`<form class="form" onsubmit="savePaymentPlan(event,'${pid}','${planId}')">
+   <label>請款項目</label>
+   <select name="type">
+     ${['訂金','一期款','二期款','三期款','尾款','追加款','其他'].map(s=>`<option ${x.type===s?'selected':''}>${s}</option>`).join('')}
+   </select>
+   <label>應收金額 *</label>
+   <input name="amount" type="number" inputmode="numeric" min="0" required value="${x.amount||0}">
+   <label>應收日期</label>
+   <input name="dueDate" type="date" value="${x.dueDate||today()}">
+   <label>狀態</label>
+   <select name="status">
+     ${['待請款','已請款','已收款'].map(s=>`<option ${x.status===s?'selected':''}>${s}</option>`).join('')}
+   </select>
+   <label>備註</label>
+   <textarea name="note">${x.note||''}</textarea>
+   <div class="actions">
+     <button type="button" class="secondary" onclick="closeModal()">取消</button>
+     <button class="primary">儲存</button>
+   </div>
+ </form>`);
+}
+function savePaymentPlan(e,pid,planId){
+ const x=formObj(e);
+ const data={
+   projectId:pid,
+   type:x.type||'請款',
+   amount:+x.amount||0,
+   dueDate:x.dueDate||'',
+   status:x.status||'待請款',
+   note:x.note||''
+ };
+ if(planId){
+   const p=db.paymentPlans.find(z=>z.id===planId);
+   Object.assign(p,data);
+ }else{
+   db.paymentPlans.push({id:id(),...data,created:Date.now()});
+ }
+ save();
+ closeModal();
+ openPaymentPlanList(pid);
+}
+function receivePaymentPlan(planId){
+ const plan=db.paymentPlans.find(x=>x.id===planId); if(!plan)return;
+ const project=db.projects.find(x=>x.id===plan.projectId);
+ modal('登記收款',`<form class="form" onsubmit="confirmReceivePaymentPlan(event,'${planId}')">
+   <label>工程</label><input value="${project?project.name:''}" disabled>
+   <label>收款項目</label><input value="${plan.type||''}" disabled>
+   <label>收款金額 *</label><input name="amount" type="number" inputmode="numeric" min="0" required value="${plan.amount||0}">
+   <label>收款日期</label><input name="date" type="date" value="${today()}">
+   <label>備註</label><textarea name="note">${plan.note||''}</textarea>
+   <div class="actions">
+     <button type="button" class="secondary" onclick="closeModal()">取消</button>
+     <button class="primary">確認收款</button>
+   </div>
+ </form>`);
+}
+function confirmReceivePaymentPlan(e,planId){
+ const x=formObj(e);
+ const plan=db.paymentPlans.find(p=>p.id===planId); if(!plan)return;
+ db.incomes.push({
+   id:id(),
+   projectId:plan.projectId,
+   type:plan.type||'請款',
+   amount:+x.amount||0,
+   date:x.date||today(),
+   note:x.note||'',
+   paymentPlanId:plan.id,
+   created:Date.now()
+ });
+ plan.status='已收款';
+ plan.receivedDate=x.date||today();
+ plan.receivedAmount=+x.amount||0;
+ save();
+ closeModal();
+ openPaymentPlanList(plan.projectId);
+}
+function renderUpcomingPayments(){
+ const wrap=document.getElementById('upcomingPayments'); if(!wrap)return;
+ const todayStr=today();
+ const cutoff=new Date();
+ cutoff.setDate(cutoff.getDate()+30);
+ const cutoffStr=cutoff.toISOString().slice(0,10);
+ const arr=db.paymentPlans
+   .filter(x=>x.status!=='已收款' && x.dueDate && x.dueDate<=cutoffStr)
+   .slice()
+   .sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||''))
+   .slice(0,5);
+
+ wrap.innerHTML=arr.length?arr.map(x=>{
+   const p=db.projects.find(z=>z.id===x.projectId);
+   const overdue=x.dueDate<todayStr;
+   return `<div class="card" onclick="openPaymentPlanList('${x.projectId}')">
+     <div class="row"><b>${p?p.name:'工程'}</b><span class="badge">${overdue?'已逾期':x.status}</span></div>
+     <div class="row"><span>${x.type||'請款'}｜${x.dueDate}</span><b>${money(x.amount)}</b></div>
+   </div>`;
+ }).join(''):'<div class="empty">未來 30 天沒有待請款項目</div>';
+}
+
+function quoteTotal(q){
+ return (q.items||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);
+}
+function openQuoteList(pid){
+ const p=db.projects.find(x=>x.id===pid); if(!p)return;
+ const arr=db.quotes.filter(q=>q.projectId===pid).slice().sort((a,b)=>b.created-a.created);
+ modal('報價管理',`
+   <div class="card">
+     <div class="row"><b>${p.name}</b><button class="linkbtn" onclick="openQuoteForm('${pid}')">＋新增報價</button></div>
+   </div>
+   ${arr.length?arr.map(q=>`
+     <div class="card" onclick="openQuote('${q.id}')">
+       <div class="row"><b>${q.title||'工程報價'}</b><span class="badge">${q.status||'草稿'}</span></div>
+       <div class="row"><span class="muted">日期</span><span>${q.date||'—'}</span></div>
+       <div class="row"><span class="muted">總額</span><b>${money(quoteTotal(q))}</b></div>
+     </div>
+   `).join(''):'<div class="empty">尚無報價</div>'}
+ `);
+}
+function openQuoteForm(pid,qid=''){
+ const q=db.quotes.find(x=>x.id===qid)||{
+   projectId:pid,
+   title:'工程報價',
+   date:today(),
+   status:'草稿',
+   note:'',
+   items:[{name:'',qty:1,unit:'式',price:0}]
+ };
+ modal(qid?'編輯報價':'新增報價',`
+   <form class="form" onsubmit="saveQuote(event,'${pid}','${qid}')">
+     <label>報價名稱</label>
+     <input name="title" value="${q.title||''}" placeholder="例如：第一次工程報價">
+     <label>報價日期</label>
+     <input name="date" type="date" value="${q.date||today()}">
+     <label>狀態</label>
+     <select name="status">
+       ${['草稿','已送出','已確認','未成交'].map(s=>`<option ${q.status===s?'selected':''}>${s}</option>`).join('')}
+     </select>
+     <label>報價項目</label>
+     <div id="quoteItems"></div>
+     <button type="button" class="secondary" style="width:100%;margin-top:8px" onclick="addQuoteItem()">＋新增項目</button>
+     <label>備註</label>
+     <textarea name="note">${q.note||''}</textarea>
+     <div class="card" style="margin-top:12px">
+       <div class="row"><span class="muted">報價總額</span><b id="quoteFormTotal">$0</b></div>
+     </div>
+     <div class="actions">
+       <button type="button" class="secondary" onclick="closeModal()">取消</button>
+       <button class="primary">儲存報價</button>
+     </div>
+   </form>
+ `);
+ window._editingQuoteItems=(q.items||[]).map(i=>({...i}));
+ renderQuoteItems();
+}
+function addQuoteItem(){
+ window._editingQuoteItems=window._editingQuoteItems||[];
+ window._editingQuoteItems.push({name:'',qty:1,unit:'式',price:0});
+ renderQuoteItems();
+}
+function removeQuoteItem(i){
+ window._editingQuoteItems.splice(i,1);
+ if(!window._editingQuoteItems.length) window._editingQuoteItems.push({name:'',qty:1,unit:'式',price:0});
+ renderQuoteItems();
+}
+function updateQuoteItem(i,key,val){
+ const it=window._editingQuoteItems[i];
+ if(!it)return;
+ it[key]=(key==='qty'||key==='price')?+val||0:val;
+ renderQuoteTotal();
+}
+function renderQuoteItems(){
+ const wrap=document.getElementById('quoteItems'); if(!wrap)return;
+ const items=window._editingQuoteItems||[];
+ wrap.innerHTML=items.map((it,i)=>`
+   <div class="card" style="padding:10px">
+     <label>項目名稱</label>
+     <input value="${it.name||''}" oninput="updateQuoteItem(${i},'name',this.value)">
+     <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+       <div><label>數量</label><input type="number" inputmode="decimal" value="${it.qty||0}" oninput="updateQuoteItem(${i},'qty',this.value)"></div>
+       <div><label>單位</label><input value="${it.unit||''}" oninput="updateQuoteItem(${i},'unit',this.value)"></div>
+     </div>
+     <label>單價</label>
+     <input type="number" inputmode="numeric" value="${it.price||0}" oninput="updateQuoteItem(${i},'price',this.value)">
+     <div class="row"><span class="muted">小計</span><b>${money((+it.qty||0)*(+it.price||0))}</b></div>
+     <div style="text-align:right"><button type="button" class="linkbtn" onclick="removeQuoteItem(${i})">刪除此項</button></div>
+   </div>
+ `).join('');
+ renderQuoteTotal();
+}
+function renderQuoteTotal(){
+ const el=document.getElementById('quoteFormTotal'); if(!el)return;
+ const total=(window._editingQuoteItems||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);
+ el.textContent=money(total);
+}
+function saveQuote(e,pid,qid){
+ const x=formObj(e);
+ const data={
+   projectId:pid,
+   title:x.title||'工程報價',
+   date:x.date||today(),
+   status:x.status||'草稿',
+   note:x.note||'',
+   items:(window._editingQuoteItems||[]).map(i=>({
+     name:i.name||'',
+     qty:+i.qty||0,
+     unit:i.unit||'',
+     price:+i.price||0
+   }))
+ };
+ if(qid){
+   const q=db.quotes.find(x=>x.id===qid);
+   Object.assign(q,data);
+ }else{
+   db.quotes.push({id:id(),...data,created:Date.now()});
+ }
+ save();
+ closeModal();
+ openQuoteList(pid);
+}
+function openQuote(qid){
+ const q=db.quotes.find(x=>x.id===qid); if(!q)return;
+ const p=db.projects.find(x=>x.id===q.projectId);
+ const total=quoteTotal(q);
+ modal('報價內容',`
+   <div class="card">
+     <div class="row"><h3>${q.title||'工程報價'}</h3><span class="badge">${q.status||'草稿'}</span></div>
+     <div class="row"><span class="muted">工程</span><span>${p?p.name:'—'}</span></div>
+     <div class="row"><span class="muted">日期</span><span>${q.date||'—'}</span></div>
+   </div>
+   ${(q.items||[]).map(i=>`
+     <div class="card">
+       <div class="row"><b>${i.name||'未命名項目'}</b><b>${money((+i.qty||0)*(+i.price||0))}</b></div>
+       <div class="muted">${i.qty||0} ${i.unit||''} × ${money(i.price||0)}</div>
+     </div>
+   `).join('')}
+   <div class="card">
+     <div class="row"><span class="muted">總額</span><b>${money(total)}</b></div>
+     ${q.note?`<div class="muted">${q.note}</div>`:''}
+   </div>
+   <div class="actions">
+     <button class="secondary" onclick="openQuoteForm('${q.projectId}','${q.id}')">編輯</button>
+     <button class="primary" onclick="applyQuoteToContract('${q.id}')">套用為合約金額</button>
+   </div>
+ `);
+}
+function applyQuoteToContract(qid){
+ const q=db.quotes.find(x=>x.id===qid); if(!q)return;
+ const p=db.projects.find(x=>x.id===q.projectId); if(!p)return;
+ const total=quoteTotal(q);
+ if(!confirm(`將工程合約金額改為 ${money(total)}，確定嗎？`)) return;
+ p.contract=total;
+ q.status='已確認';
+ if(p.status==='洽談中') p.status='施工中';
+ save();
+ closeModal();
+ openProject(p.id);
+}
 
 function openAdjustment(pid){
  const p=db.projects.find(x=>x.id===pid); if(!p)return;
@@ -570,7 +897,9 @@ function importBackup(event){
          progress:incoming.progress||[],
          clients:incoming.clients||[],
          vendors:incoming.vendors||[],
-         adjustments:incoming.adjustments||[]
+         adjustments:incoming.adjustments||[],
+         quotes:incoming.quotes||[],
+         paymentPlans:incoming.paymentPlans||[]
        };
        save(); alert('備份已成功還原。'); showPage('home');
      }
@@ -746,7 +1075,7 @@ function saveVendor(e,vid){
 }
 
 function resetData(){
- if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[],adjustments:[]};save();showPage('home')}
+ if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[],adjustments:[],quotes:[],paymentPlans:[]};save();showPage('home')}
 }
 
 // iPhone / 手機鍵盤開啟時，讓正在輸入的欄位自動滑到可見位置
@@ -760,7 +1089,7 @@ document.addEventListener('focusin', function(e){
 
 
 
-const APP_VERSION='1787471114';
+const APP_VERSION='1787471473';
 
 async function registerUpdater(){
   if(!('serviceWorker' in navigator) || location.protocol==='file:') return;
