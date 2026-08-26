@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="1787471981">
+<meta name="app-version" content="1787752091">
 
 <title>盛昱室內裝修有限公司｜公司管理系統</title>
 <style>
@@ -93,6 +93,33 @@ main{padding:14px}
 .sheet .form{padding-bottom:40vh}
 .sheet-head h3{margin:0}
 .close{border:0;background:#e5e7eb;border-radius:50%;width:34px;height:34px}
+
+.estimate-toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.estimate-table{width:100%;border-collapse:collapse;background:#fff;font-size:13px}
+.estimate-table th,.estimate-table td{border:1px solid var(--line);padding:8px;vertical-align:top}
+.estimate-table th{background:#f3f4f6;text-align:left}
+.estimate-total{font-size:18px;font-weight:800}
+.print-only{display:none}
+@media print{
+  body{background:#fff!important}
+  header,.bottom,.no-print,.modal{display:none!important}
+  .app{max-width:none;padding:0!important}
+  main{padding:0!important}
+  .page{display:none!important}
+  #estimatePrint.page{display:block!important}
+  #estimatePrint{padding:0!important}
+  .print-only{display:block!important}
+  .estimate-print-wrap{padding:16mm 14mm;color:#111}
+  .estimate-print-wrap h1{margin:0;font-size:26px}
+  .estimate-print-wrap .company{font-size:13px;line-height:1.7;margin-top:8px}
+  .estimate-print-wrap .meta{margin:18px 0}
+  .estimate-print-wrap .meta .row{font-size:13px}
+  .estimate-table{font-size:12px}
+  .estimate-table th,.estimate-table td{border:1px solid #999;padding:6px}
+  .estimate-sign{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
+  .estimate-sign div{border-top:1px solid #777;padding-top:8px;text-align:center}
+}
+
 </style>
 
 <meta name="theme-color" content="#f5f6f8">
@@ -108,7 +135,7 @@ main{padding:14px}
 <div class="app">
 <header>
   <div class="brand">盛昱室內裝修有限公司</div>
-  <div class="sub">公司管理系統 V5.1 修復版｜手機版</div>
+  <div class="sub">公司管理系統 V5.2｜手機版</div>
 </header>
 
 <main>
@@ -172,6 +199,30 @@ main{padding:14px}
   <div id="vendorList"></div>
 </section>
 
+
+<section id="estimates" class="page">
+  <div class="section-title">
+    <h2>估價單</h2>
+    <button class="linkbtn" onclick="openEstimateForm()">＋新增</button>
+  </div>
+  <div class="card">
+    <input id="estimateSearch" placeholder="搜尋估價單、工程、客戶" oninput="renderEstimates()" style="width:100%;border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff">
+  </div>
+  <div id="estimateList"></div>
+</section>
+
+<section id="estimatePrint" class="page">
+  <div class="no-print" style="padding:14px">
+    <button class="linkbtn" onclick="showEstimates()">‹ 返回估價單</button>
+    <div class="estimate-toolbar">
+      <button class="primary" onclick="window.print()">列印／儲存 PDF</button>
+      <button class="secondary" onclick="editCurrentEstimate()">編輯</button>
+    </div>
+    <div class="muted">iPhone：按「列印／儲存 PDF」後，可在列印預覽中分享或儲存成 PDF。</div>
+  </div>
+  <div id="estimatePrintWrap" class="estimate-print-wrap"></div>
+</section>
+
 <section id="yearEnd" class="page">
   <div class="section-title">
     <h2>年底總結算</h2>
@@ -204,6 +255,11 @@ main{padding:14px}
   <div class="card">
     <div class="row" style="align-items:center"><span><b>客戶管理</b><br><span class="muted">名單、聯絡方式、關聯工程</span></span><button class="linkbtn" onclick="showClients()">查看</button></div>
     <div class="row" style="align-items:center"><span><b>廠商管理</b><br><span class="muted">工種、聯絡人、電話、備註</span></span><button class="linkbtn" onclick="showVendors()">查看</button></div>
+    
+    <div class="row" style="align-items:center">
+      <span><b>估價單</b><br><span class="muted">建立、列印、儲存 PDF</span></span>
+      <button class="linkbtn" onclick="showEstimates()">查看</button>
+    </div>
     <div class="row"><span>照片與文件</span><span class="muted">下一版擴充</span></div>
     <div class="row" style="align-items:center">
       <span><b>年底總結算</b><br><span class="muted">年度工程、收款、支出與結餘</span></span>
@@ -256,7 +312,7 @@ main{padding:14px}
 const LS='shengyu_manager_v1';
 const EMPTY_DB={
   projects:[],incomes:[],expenses:[],progress:[],
-  clients:[],vendors:[],adjustments:[],quotes:[],paymentPlans:[]
+  clients:[],vendors:[],adjustments:[],quotes:[],paymentPlans:[],estimates:[]
 };
 let db;
 try{
@@ -265,6 +321,7 @@ try{
 }catch(err){
   db=JSON.parse(JSON.stringify(EMPTY_DB));
 }
+db.estimates=db.estimates||[];
 for(const key of Object.keys(EMPTY_DB)){
   if(!Array.isArray(db[key])) db[key]=[];
 }
@@ -911,7 +968,8 @@ function importBackup(event){
          vendors:incoming.vendors||[],
          adjustments:incoming.adjustments||[],
          quotes:incoming.quotes||[],
-         paymentPlans:incoming.paymentPlans||[]
+         paymentPlans:incoming.paymentPlans||[],
+         estimates:incoming.estimates||[]
        };
        save(); alert('備份已成功還原。'); showPage('home');
      }
@@ -1086,8 +1144,158 @@ function saveVendor(e,vid){
  save(); closeModal(); showVendors();
 }
 
+
+let currentEstimateId=null;
+let estimateDraftItems=[];
+
+function esc(v){
+  return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
+}
+function estimateTotal(e){ return (e.items||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0); }
+function estimateTax(e){ const base=estimateTotal(e); return e.taxEnabled?Math.round(base*(+e.taxRate||5)/100):0; }
+function estimateGrand(e){ return estimateTotal(e)+estimateTax(e); }
+function nextEstimateNo(){
+  const y=new Date().getFullYear();
+  const seq=(db.estimates||[]).filter(e=>(e.no||'').startsWith('EST-'+y+'-')).length+1;
+  return 'EST-'+y+'-'+String(seq).padStart(3,'0');
+}
+function showEstimates(){ showPage('estimates'); renderEstimates(); }
+function renderEstimates(){
+  const wrap=document.getElementById('estimateList'); if(!wrap)return;
+  const q=((document.getElementById('estimateSearch')||{}).value||'').trim().toLowerCase();
+  const arr=(db.estimates||[]).filter(e=>{
+    const p=db.projects.find(x=>x.id===e.projectId);
+    return [e.no,e.title,e.clientName,e.contact,p&&p.name].join(' ').toLowerCase().includes(q);
+  }).slice().sort((a,b)=>(b.created||0)-(a.created||0));
+  wrap.innerHTML=arr.length?arr.map(e=>{
+    const p=db.projects.find(x=>x.id===e.projectId);
+    return `<div class="card" onclick="openEstimate('${e.id}')">
+      <div class="row"><h3>${esc(e.no||'估價單')}</h3><span class="badge">${esc(e.status||'草稿')}</span></div>
+      <div class="row"><span>${esc(p?p.name:(e.title||'未指定工程'))}</span><b>${money(estimateGrand(e))}</b></div>
+      <div class="row"><span class="muted">${esc(e.clientName||'未填客戶')}</span><span class="muted">${esc(e.date||'')}</span></div>
+    </div>`;
+  }).join(''):'<div class="empty">尚未建立估價單</div>';
+}
+function estimateProjectOptions(selected=''){
+  return '<option value="">不綁定工程</option>'+db.projects.map(p=>`<option value="${p.id}" ${p.id===selected?'selected':''}>${esc(p.name)}</option>`).join('');
+}
+function openEstimateForm(pid='',eid=''){
+  const old=(db.estimates||[]).find(x=>x.id===eid);
+  const p=db.projects.find(x=>x.id===(pid||(old&&old.projectId)));
+  const e=old||{
+    projectId:pid||'',no:nextEstimateNo(),title:p?p.name:'室內裝修工程估價',date:today(),validUntil:'',status:'草稿',
+    clientName:p?(p.client||''):'',contact:p?(p.contact||''):'',phone:p?(p.phone||''):'',address:p?(p.address||''):'',
+    taxEnabled:false,taxRate:5,note:'',items:[{name:'',spec:'',qty:1,unit:'式',price:0}]
+  };
+  estimateDraftItems=(e.items||[]).map(i=>({...i}));
+  modal(eid?'編輯估價單':'新增估價單',`<form class="form" onsubmit="saveEstimate(event,'${eid}')">
+    <label>估價單編號</label><input name="no" required value="${esc(e.no||nextEstimateNo())}">
+    <label>關聯工程</label><select name="projectId" onchange="fillEstimateProject(this)">${estimateProjectOptions(e.projectId||pid||'')}</select>
+    <label>估價名稱</label><input name="title" value="${esc(e.title||'')}">
+    <label>估價日期</label><input name="date" type="date" value="${esc(e.date||today())}">
+    <label>有效期限</label><input name="validUntil" type="date" value="${esc(e.validUntil||'')}">
+    <label>狀態</label><select name="status">${['草稿','已送出','已確認','作廢'].map(s=>`<option ${e.status===s?'selected':''}>${s}</option>`).join('')}</select>
+    <label>客戶／公司名稱</label><input name="clientName" value="${esc(e.clientName||'')}">
+    <label>聯絡人</label><input name="contact" value="${esc(e.contact||'')}">
+    <label>電話</label><input name="phone" inputmode="tel" value="${esc(e.phone||'')}">
+    <label>工程地址</label><input name="address" value="${esc(e.address||'')}">
+    <label>估價項目</label><div id="estimateItems"></div>
+    <button type="button" class="secondary" style="width:100%;margin-top:8px" onclick="addEstimateItem()">＋新增項目</button>
+    <label style="display:flex;align-items:center;gap:8px;color:var(--text)"><input name="taxEnabled" type="checkbox" ${e.taxEnabled?'checked':''} onchange="renderEstimateDraftTotal()" style="width:auto">加計營業稅</label>
+    <label>稅率 %</label><input name="taxRate" type="number" min="0" max="100" step="0.1" value="${+e.taxRate||5}" oninput="renderEstimateDraftTotal()">
+    <div class="card">
+      <div class="row"><span class="muted">未稅小計</span><b id="estimateSubtotal">$0</b></div>
+      <div class="row"><span class="muted">稅額</span><b id="estimateTax">$0</b></div>
+      <div class="row"><span>總計</span><b class="estimate-total" id="estimateGrand">$0</b></div>
+    </div>
+    <label>備註／付款條件</label><textarea name="note">${esc(e.note||'')}</textarea>
+    <div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存估價單</button></div>
+  </form>`);
+  renderEstimateItems();
+}
+function fillEstimateProject(sel){
+  const p=db.projects.find(x=>x.id===sel.value); if(!p)return;
+  const f=sel.form;
+  if(f.title&&!f.title.value)f.title.value=p.name||'';
+  if(f.clientName)f.clientName.value=p.client||'';
+  if(f.contact)f.contact.value=p.contact||'';
+  if(f.phone)f.phone.value=p.phone||'';
+  if(f.address)f.address.value=p.address||'';
+}
+function addEstimateItem(){ estimateDraftItems.push({name:'',spec:'',qty:1,unit:'式',price:0}); renderEstimateItems(); }
+function removeEstimateItem(i){ estimateDraftItems.splice(i,1); if(!estimateDraftItems.length)estimateDraftItems.push({name:'',spec:'',qty:1,unit:'式',price:0}); renderEstimateItems(); }
+function updateEstimateItem(i,key,val){ const it=estimateDraftItems[i]; if(!it)return; it[key]=(key==='qty'||key==='price')?(+val||0):val; renderEstimateDraftTotal(); }
+function renderEstimateItems(){
+  const wrap=document.getElementById('estimateItems'); if(!wrap)return;
+  wrap.innerHTML=estimateDraftItems.map((it,i)=>`
+    <div class="card" style="padding:10px">
+      <label>項目名稱</label><input value="${esc(it.name||'')}" oninput="updateEstimateItem(${i},'name',this.value)">
+      <label>規格／說明</label><input value="${esc(it.spec||'')}" oninput="updateEstimateItem(${i},'spec',this.value)">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><label>數量</label><input type="number" inputmode="decimal" step="0.01" value="${+it.qty||0}" oninput="updateEstimateItem(${i},'qty',this.value)"></div>
+        <div><label>單位</label><input value="${esc(it.unit||'')}" oninput="updateEstimateItem(${i},'unit',this.value)"></div>
+      </div>
+      <label>單價</label><input type="number" inputmode="numeric" min="0" value="${+it.price||0}" oninput="updateEstimateItem(${i},'price',this.value)">
+      <div class="row"><span class="muted">小計</span><b>${money((+it.qty||0)*(+it.price||0))}</b></div>
+      <div style="text-align:right"><button type="button" class="linkbtn" onclick="removeEstimateItem(${i})">刪除此項</button></div>
+    </div>`).join('');
+  renderEstimateDraftTotal();
+}
+function renderEstimateDraftTotal(){
+  const form=document.querySelector('#modal .form'); if(!form)return;
+  const subtotal=estimateDraftItems.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);
+  const taxOn=!!(form.taxEnabled&&form.taxEnabled.checked);
+  const rate=+(form.taxRate&&form.taxRate.value)||0;
+  const tax=taxOn?Math.round(subtotal*rate/100):0;
+  const grand=subtotal+tax;
+  if(document.getElementById('estimateSubtotal'))document.getElementById('estimateSubtotal').textContent=money(subtotal);
+  if(document.getElementById('estimateTax'))document.getElementById('estimateTax').textContent=money(tax);
+  if(document.getElementById('estimateGrand'))document.getElementById('estimateGrand').textContent=money(grand);
+}
+function saveEstimate(ev,eid){
+  const x=formObj(ev),form=ev.target;
+  const data={projectId:x.projectId||'',no:x.no||nextEstimateNo(),title:x.title||'室內裝修工程估價',date:x.date||today(),
+    validUntil:x.validUntil||'',status:x.status||'草稿',clientName:x.clientName||'',contact:x.contact||'',phone:x.phone||'',
+    address:x.address||'',taxEnabled:!!form.taxEnabled.checked,taxRate:+x.taxRate||5,note:x.note||'',
+    items:estimateDraftItems.map(i=>({name:i.name||'',spec:i.spec||'',qty:+i.qty||0,unit:i.unit||'',price:+i.price||0}))};
+  if(eid){ const e=db.estimates.find(z=>z.id===eid); Object.assign(e,data,{updated:Date.now()}); }
+  else db.estimates.push({id:id(),...data,created:Date.now()});
+  save(); closeModal();
+  const saved=eid?db.estimates.find(z=>z.id===eid):db.estimates[db.estimates.length-1];
+  openEstimate(saved.id);
+}
+function openEstimate(eid){ const e=db.estimates.find(x=>x.id===eid); if(!e)return; currentEstimateId=eid; renderEstimatePrint(e); showPage('estimatePrint'); }
+function editCurrentEstimate(){ const e=db.estimates.find(x=>x.id===currentEstimateId); if(!e)return; openEstimateForm(e.projectId||'',e.id); }
+function renderEstimatePrint(e){
+  const wrap=document.getElementById('estimatePrintWrap'); if(!wrap)return;
+  const p=db.projects.find(x=>x.id===e.projectId),subtotal=estimateTotal(e),tax=estimateTax(e),grand=estimateGrand(e);
+  wrap.innerHTML=`
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:20px">
+      <div><h1>估價單</h1><div class="company"><b>盛昱室內裝修有限公司</b><br>室內裝修工程管理系統</div></div>
+      <div style="text-align:right;font-size:13px;line-height:1.8"><b>${esc(e.no||'')}</b><br>日期：${esc(e.date||'—')}<br>${e.validUntil?`有效至：${esc(e.validUntil)}`:''}</div>
+    </div>
+    <div class="meta">
+      <div class="row"><span>客戶／公司</span><b>${esc(e.clientName||'—')}</b></div>
+      <div class="row"><span>聯絡人</span><span>${esc(e.contact||'—')}</span></div>
+      <div class="row"><span>電話</span><span>${esc(e.phone||'—')}</span></div>
+      <div class="row"><span>工程名稱</span><span>${esc(p?p.name:(e.title||'—'))}</span></div>
+      <div class="row"><span>工程地址</span><span>${esc(e.address||'—')}</span></div>
+    </div>
+    <table class="estimate-table">
+      <thead><tr><th>#</th><th>項目</th><th>規格／說明</th><th>數量</th><th>單位</th><th>單價</th><th>小計</th></tr></thead>
+      <tbody>${(e.items||[]).map((i,idx)=>`<tr><td>${idx+1}</td><td>${esc(i.name||'')}</td><td>${esc(i.spec||'')}</td><td>${Number(i.qty||0).toLocaleString('zh-TW')}</td><td>${esc(i.unit||'')}</td><td>${money(i.price||0)}</td><td>${money((+i.qty||0)*(+i.price||0))}</td></tr>`).join('')}</tbody>
+    </table>
+    <div style="margin-top:14px;margin-left:auto;max-width:320px">
+      <div class="row"><span>未稅小計</span><b>${money(subtotal)}</b></div>
+      ${e.taxEnabled?`<div class="row"><span>營業稅 ${+e.taxRate||5}%</span><b>${money(tax)}</b></div>`:''}
+      <div class="row" style="font-size:18px"><span><b>總計</b></span><b>${money(grand)}</b></div>
+    </div>
+    ${e.note?`<div style="margin-top:22px"><b>備註／付款條件</b><div style="white-space:pre-wrap;margin-top:8px;line-height:1.6">${esc(e.note)}</div></div>`:''}
+    <div class="estimate-sign"><div>客戶簽認</div><div>盛昱室內裝修有限公司</div></div>`;
+}
+
 function resetData(){
- if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[],adjustments:[],quotes:[],paymentPlans:[]};save();showPage('home')}
+ if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[],adjustments:[],quotes:[],paymentPlans:[],estimates:[]};save();showPage('home')}
 }
 
 // iPhone / 手機鍵盤開啟時，讓正在輸入的欄位自動滑到可見位置
@@ -1101,7 +1309,7 @@ document.addEventListener('focusin', function(e){
 
 
 
-const APP_VERSION='1787471981';
+const APP_VERSION='1787752091';
 
 
 async function cleanupOldCache(){
