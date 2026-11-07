@@ -1388,16 +1388,60 @@ function estimatePrintDocument(){
   const e=db.estimates.find(x=>x.id===currentEstimateId);
   if(!e){alert('請先開啟估價單。');return null;}
   renderEstimatePrint(e);
-  const body=document.getElementById('estimatePrintWrap').innerHTML;
-  const style=document.querySelector('style').textContent;
-  return '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
-    '<title>'+esc(e.no||'估價單')+'</title><style>'+style+'\n'+
-    'body{background:#fff!important}.app{max-width:none!important;padding:0!important}main{padding:0!important}.page{display:block!important}.estimate-print-wrap{padding:12mm;color:#111}.estimate-sign{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:35px}.estimate-sign div{border-top:1px solid #777;padding-top:8px;text-align:center}'+
-    '@media print{@page{size:A4;margin:8mm}body{margin:0}.print-actions{display:none!important}.estimate-print-wrap{padding:0!important}.estimate-table tr{break-inside:avoid}}'+
-    '</style></head><body><div class="print-actions" style="padding:12px;background:#e8f0ed;display:flex;gap:10px;flex-wrap:wrap">'+
-    '<button onclick="window.print()" style="padding:12px;background:#2f5d50;color:white;border:0;border-radius:8px">列印／儲存 PDF</button>'+ 
-    '<span style="font-size:13px">iPhone 可用 Safari 分享選單的「列印」，在預覽中儲存 PDF</span></div>'+ 
-    '<div class="estimate-print-wrap">'+body+'</div></body></html>';
+  const content=document.getElementById('estimatePrintWrap').innerHTML;
+  // 使用完全獨立的列印樣式，不繼承手機主畫面的窄欄、隱藏及捲動規則。
+  const printCSS=`
+    @page{size:A4 portrait;margin:12mm 11mm}
+    *{box-sizing:border-box}
+    html,body{margin:0;padding:0;width:100%;height:auto;overflow:visible!important;background:#fff;color:#111;
+      font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei","Noto Sans CJK TC",sans-serif;
+      -webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body{font-size:11pt;line-height:1.5}
+    .print-actions{padding:12px;background:#e8f0ed;display:flex;gap:12px;align-items:center}
+    .estimate-print-wrap{width:100%;max-width:188mm;margin:0 auto;padding:12mm 10mm;color:#111}
+    .estimate-print-wrap>div:first-child{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:12mm!important}
+    .estimate-print-wrap>div:first-child>div:first-child{flex:1 1 58%;min-width:0}
+    .estimate-print-wrap>div:first-child>div:last-child{flex:0 0 38%;min-width:0;overflow-wrap:normal;word-break:keep-all}
+    .estimate-print-wrap h1{font-size:22pt;margin:0 0 4mm;line-height:1.2}
+    .estimate-print-wrap .company{font-size:11pt;line-height:1.65}
+    .meta{margin:7mm 0 6mm}
+    .row{display:flex;justify-content:space-between;gap:5mm;margin:2mm 0;align-items:baseline;min-width:0}
+    .row>*{min-width:0;overflow-wrap:anywhere}
+    .meta .row>span:first-child{flex:0 0 25%;color:#333}
+    .meta .row>span:last-child,.meta .row>b{flex:1;text-align:right}
+    .estimate-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9pt;background:#fff}
+    .estimate-table th,.estimate-table td{border:1px solid #777;padding:2.5mm 1.5mm;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+    .estimate-table th{background:#f0f0f0;text-align:center;font-weight:700}
+    .estimate-table th:nth-child(1){width:5%}
+    .estimate-table th:nth-child(2){width:20%}
+    .estimate-table th:nth-child(3){width:25%}
+    .estimate-table th:nth-child(4){width:7%}
+    .estimate-table th:nth-child(5){width:7%}
+    .estimate-table th:nth-child(6){width:18%}
+    .estimate-table th:nth-child(7){width:18%}
+    .estimate-table td:nth-child(1),.estimate-table td:nth-child(4),.estimate-table td:nth-child(5){text-align:center}
+    .estimate-table td:nth-child(6),.estimate-table td:nth-child(7){text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:8.5pt}
+    .estimate-sign{margin-top:15mm;display:grid;grid-template-columns:1fr 1fr;gap:12mm;break-inside:avoid}
+    .estimate-sign div{border-top:1px solid #777;padding-top:3mm;text-align:center}
+    @media print{
+      html,body{width:auto!important;overflow:visible!important}
+      .print-actions{display:none!important}
+      .estimate-print-wrap{width:100%;max-width:none;padding:0;margin:0}
+      .estimate-table thead{display:table-header-group}
+      .estimate-table tr{break-inside:avoid;page-break-inside:avoid}
+      .estimate-sign{break-inside:avoid}
+    }
+    @media screen and (max-width:600px){
+      .estimate-print-wrap{min-width:700px;width:700px;max-width:none;padding:18px}
+      body{overflow-x:auto!important}
+    }
+  `;
+  return '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8">'+
+    '<meta name="viewport" content="width=device-width,initial-scale=1">'+
+    '<title>'+esc(e.no||'估價單')+'</title><style>'+printCSS+'</style></head><body>'+
+    '<div class="print-actions"><button onclick="window.print()" style="padding:12px;background:#2f5d50;color:white;border:0;border-radius:8px">列印／儲存 PDF</button>'+
+    '<span>iPhone 可從 Safari 分享選單選擇「列印」，再儲存 PDF</span></div>'+
+    '<div class="estimate-print-wrap">'+content+'</div></body></html>';
 }
 function downloadEstimatePrintable(){
   const html=estimatePrintDocument();if(!html)return;
@@ -1430,7 +1474,7 @@ function resetData(){
 
 
 
-const APP_VERSION='20261107-v55-printfix';
+const APP_VERSION='20261107-v56-a4-print';
 
 
 async function cleanupOldCache(){
