@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="1787752091">
+<meta name="app-version" content="20261107-v53">
 
 <title>盛昱室內裝修有限公司｜公司管理系統</title>
 <style>
@@ -271,8 +271,8 @@ main{padding:14px}
     <h3>資料備份</h3>
     <p class="muted">可將目前工程、收款、支出與進度資料匯出成備份檔，需要時再匯入還原。</p>
     <div class="actions">
-      <button class="primary" onclick="exportBackup()">下載備份</button>
-      <button class="secondary" onclick="document.getElementById('backupInput').click()">匯入備份</button>
+      <button type="button" class="primary" onclick="exportBackup()">下載備份</button>
+      <button type="button" class="secondary" onclick="document.getElementById('backupInput').click()">匯入備份</button>
     </div>
     <input id="backupInput" type="file" accept=".json,application/json" style="display:none" onchange="importBackup(event)">
   </div>
@@ -357,7 +357,13 @@ function setProjectView(view){
  renderAll();
 }
 
-function modal(title,html){document.getElementById('modalTitle').textContent=title;document.getElementById('modalBody').innerHTML=html;document.getElementById('modal').classList.add('open')}
+function modal(title,html){
+ const root=document.getElementById('modal');
+ document.getElementById('modalTitle').textContent=title;
+ document.getElementById('modalBody').innerHTML=html;
+ root.classList.add('open');
+ const sheet=root.querySelector('.sheet');if(sheet)sheet.scrollTop=0;
+}
 function projectOptions(){
  return db.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
 }
@@ -944,15 +950,37 @@ function saveProjectStatus(e,pid){
  save(); closeModal(); openProject(pid);
 }
 function exportBackup(){
- const payload={app:'盛昱室內裝修公司管理系統',version:1,exportedAt:new Date().toISOString(),data:db};
- const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
- const url=URL.createObjectURL(blob);
- const a=document.createElement('a');
- const d=new Date();
- const date=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
- a.href=url; a.download='盛昱管理系統備份_'+date+'.json';
- document.body.appendChild(a); a.click(); a.remove();
- setTimeout(()=>URL.revokeObjectURL(url),1000);
+ try{
+  const payload={app:'盛昱室內裝修公司管理系統',version:1,exportedAt:new Date().toISOString(),data:db};
+  const content=JSON.stringify(payload,null,2);
+  const blob=new Blob([content],{type:'application/json;charset=utf-8'});
+  const d=new Date();
+  const date=d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0');
+  const filename='盛昱管理系統備份_'+date+'.json';
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=filename;a.style.display='none';
+  document.body.appendChild(a);a.click();
+  setTimeout(()=>{a.remove();URL.revokeObjectURL(url)},60000);
+  // iOS 的主畫面網頁有時不支援直接下載，提供可複製的備份內容作為替代。
+  if(/iPhone|iPad|iPod/i.test(navigator.userAgent)){
+   setTimeout(()=>{
+    if(confirm('已嘗試下載備份。若「檔案」App 找不到備份，按「確定」可開啟文字備份，複製後存入備忘錄或檔案。'))showBackupText(content);
+   },500);
+  }
+ }catch(err){alert('下載備份失敗，將改用文字備份：'+err.message);showBackupText();}
+}
+function showBackupText(content){
+ try{
+  const backup=content||JSON.stringify({app:'盛昱室內裝修公司管理系統',version:1,exportedAt:new Date().toISOString(),data:db},null,2);
+  modal('手動備份（可複製）',`<p class="muted">全選複製下方內容，存成 .json 檔。請勿分享給無關人員。</p><textarea id="manualBackupText" readonly style="width:100%;height:48vh;white-space:pre;overflow:auto;font-size:12px"></textarea><div class="actions"><button type="button" class="primary" onclick="copyBackupText()">複製備份文字</button><button type="button" class="secondary" onclick="closeModal()">關閉</button></div>`);
+  document.getElementById('manualBackupText').value=backup;
+ }catch(err){alert('無法顯示備份：'+err.message);}
+}
+async function copyBackupText(){
+ const el=document.getElementById('manualBackupText');if(!el)return;
+ try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(el.value);alert('備份內容已複製。');return;}}catch(err){}
+ el.focus();el.select();el.setSelectionRange(0,el.value.length);
+ try{if(document.execCommand('copy'))alert('備份內容已複製。');else alert('請長按文字選擇全選、複製。');}catch(err){alert('請長按文字選擇全選、複製。');}
 }
 function importBackup(event){
  const file=event.target.files && event.target.files[0]; if(!file)return;
@@ -1155,7 +1183,7 @@ function esc(v){
   return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#039;");
 }
 function estimateTotal(e){ return (e.items||[]).reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0); }
-function estimateTax(e){ const base=estimateTotal(e); return e.taxEnabled?Math.round(base*(+e.taxRate||5)/100):0; }
+function estimateTax(e){ const base=estimateTotal(e); return e.taxEnabled?Math.round(base*(e.taxRate==null?5:+e.taxRate)/100):0; }
 function estimateGrand(e){ return estimateTotal(e)+estimateTax(e); }
 function nextEstimateNo(){
   const y=new Date().getFullYear();
@@ -1172,10 +1200,11 @@ function renderEstimates(){
   }).slice().sort((a,b)=>(b.created||0)-(a.created||0));
   wrap.innerHTML=arr.length?arr.map(e=>{
     const p=db.projects.find(x=>x.id===e.projectId);
-    return `<div class="card" onclick="openEstimate('${e.id}')">
+    return `<div class="card" role="button" tabindex="0" style="cursor:pointer" onclick="openEstimate('${e.id}')" onkeydown="if(event.key==='Enter')openEstimate('${e.id}')">
       <div class="row"><h3>${esc(e.no||'估價單')}</h3><span class="badge">${esc(e.status||'草稿')}</span></div>
       <div class="row"><span>${esc(p?p.name:(e.title||'未指定工程'))}</span><b>${money(estimateGrand(e))}</b></div>
       <div class="row"><span class="muted">${esc(e.clientName||'未填客戶')}</span><span class="muted">${esc(e.date||'')}</span></div>
+      <div class="actions"><button type="button" class="primary" onclick="event.stopPropagation();openEstimate('${e.id}')">開啟</button><button type="button" class="secondary" onclick="event.stopPropagation();openEstimateForm('${e.projectId||''}','${e.id}')">編輯</button></div>
        <div class="actions"><button type="button" class="secondary" onclick="event.stopPropagation();openEstimateForm('','${e.id}')">編輯草稿</button><button type="button" class="primary" onclick="event.stopPropagation();openEstimate('${e.id}')">開啟估價單</button></div>
     </div>`;
   }).join(''):'<div class="empty">尚未建立估價單</div>';
@@ -1206,7 +1235,7 @@ function openEstimateForm(pid='',eid=''){
     <label>估價項目</label><div id="estimateItems"></div>
     <button type="button" class="secondary" style="width:100%;margin-top:8px" onclick="addEstimateItem()">＋新增項目</button>
     <label style="display:flex;align-items:center;gap:8px;color:var(--text)"><input name="taxEnabled" type="checkbox" ${e.taxEnabled?'checked':''} onchange="renderEstimateDraftTotal()" style="width:auto">加計營業稅</label>
-    <label>稅率 %</label><input name="taxRate" type="number" min="0" max="100" step="0.1" value="${+e.taxRate||5}" oninput="renderEstimateDraftTotal()">
+    <label>稅率 %</label><input name="taxRate" type="number" min="0" max="100" step="0.1" value="${e.taxRate==null?5:+e.taxRate}" oninput="renderEstimateDraftTotal()">
     <div class="card">
       <div class="row"><span class="muted">未稅小計</span><b id="estimateSubtotal">$0</b></div>
       <div class="row"><span class="muted">稅額</span><b id="estimateTax">$0</b></div>
@@ -1260,7 +1289,7 @@ function saveEstimate(ev,eid){
   const x=formObj(ev),form=ev.target;
   const data={projectId:x.projectId||'',no:x.no||nextEstimateNo(),title:x.title||'室內裝修工程估價',date:x.date||today(),
     validUntil:x.validUntil||'',status:x.status||'草稿',clientName:x.clientName||'',contact:x.contact||'',phone:x.phone||'',
-    address:x.address||'',taxEnabled:!!form.elements.namedItem('taxEnabled').checked,taxRate:+x.taxRate||5,note:x.note||'',
+    address:x.address||'',taxEnabled:!!form.elements.namedItem('taxEnabled').checked,taxRate:x.taxRate===''?5:(+x.taxRate||0),note:x.note||'',
     items:estimateDraftItems.map(i=>({name:i.name||'',spec:i.spec||'',qty:+i.qty||0,unit:i.unit||'',price:+i.price||0}))};
   if(eid){ const e=db.estimates.find(z=>z.id===eid); Object.assign(e,data,{updated:Date.now()}); }
   else db.estimates.push({id:id(),...data,created:Date.now()});
@@ -1291,7 +1320,7 @@ function renderEstimatePrint(e){
     </table>
     <div style="margin-top:14px;margin-left:auto;max-width:320px">
       <div class="row"><span>未稅小計</span><b>${money(subtotal)}</b></div>
-      ${e.taxEnabled?`<div class="row"><span>營業稅 ${+e.taxRate||5}%</span><b>${money(tax)}</b></div>`:''}
+      ${e.taxEnabled?`<div class="row"><span>營業稅 ${e.taxRate==null?5:+e.taxRate}%</span><b>${money(tax)}</b></div>`:''}
       <div class="row" style="font-size:18px"><span><b>總計</b></span><b>${money(grand)}</b></div>
     </div>
     ${e.note?`<div style="margin-top:22px"><b>備註／付款條件</b><div style="white-space:pre-wrap;margin-top:8px;line-height:1.6">${esc(e.note)}</div></div>`:''}
@@ -1333,7 +1362,11 @@ function saveRecordEdit(ev,collection,rid){
  const x=formObj(ev);Object.assign(r,x,{amount:+x.amount||0});
  save();closeModal();openProject(r.projectId);
 }
-function forceAppUpdate(){location.reload();}
+async function forceAppUpdate(){
+ try{await cleanupOldCache();}catch(e){}
+ const url=new URL(location.href);url.searchParams.set('v',APP_VERSION);
+ location.replace(url.toString());
+}
 
 function resetData(){
  if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[],adjustments:[],quotes:[],paymentPlans:[],estimates:[]};save();showPage('home')}
@@ -1350,7 +1383,7 @@ document.addEventListener('focusin', function(e){
 
 
 
-const APP_VERSION='1787752091';
+const APP_VERSION='20261107-v53';
 
 
 async function cleanupOldCache(){
