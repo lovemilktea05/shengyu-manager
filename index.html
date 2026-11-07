@@ -217,10 +217,11 @@ body.modal-active{overflow:hidden}
   <div class="no-print" style="padding:14px">
     <button class="linkbtn" onclick="showEstimates()">‹ 返回估價單</button>
     <div class="estimate-toolbar">
-      <button class="primary" onclick="window.print()">列印／儲存 PDF</button>
+      <button class="primary" onclick="printEstimate()">列印／儲存 PDF</button>
       <button class="secondary" onclick="editCurrentEstimate()">編輯</button>
+      <button class="secondary" onclick="downloadEstimatePrintable()">另存可列印檔</button>
     </div>
-    <div class="muted">iPhone：按「列印／儲存 PDF」後，可在列印預覽中分享或儲存成 PDF。</div>
+    <div class="muted">若在 iPhone 主畫面捷徑或 App 內無法列印，請按「另存可列印檔」，再用 Safari 開啟並使用分享 → 列印 → 儲存到檔案。</div>
   </div>
   <div id="estimatePrintWrap" class="estimate-print-wrap"></div>
 </section>
@@ -1371,6 +1372,44 @@ async function forceAppUpdate(){
  location.replace(url.toString());
 }
 
+// 列印與 PDF：先同步最新估價內容，避免儲存後空白或舊畫面。
+function estimatePrintDocument(){
+  const e=db.estimates.find(x=>x.id===currentEstimateId);
+  if(!e){alert('請先開啟估價單。');return null;}
+  renderEstimatePrint(e);
+  const body=document.getElementById('estimatePrintWrap').innerHTML;
+  const style=document.querySelector('style').textContent;
+  return '<!doctype html><html lang="zh-Hant"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">'+
+    '<title>'+esc(e.no||'估價單')+'</title><style>'+style+'\n'+
+    'body{background:#fff!important}.app{max-width:none!important;padding:0!important}main{padding:0!important}.page{display:block!important}.estimate-print-wrap{padding:12mm;color:#111}.estimate-sign{margin-top:28px;display:grid;grid-template-columns:1fr 1fr;gap:35px}.estimate-sign div{border-top:1px solid #777;padding-top:8px;text-align:center}'+
+    '@media print{@page{size:A4;margin:8mm}body{margin:0}.print-actions{display:none!important}.estimate-print-wrap{padding:0!important}.estimate-table tr{break-inside:avoid}}'+
+    '</style></head><body><div class="print-actions" style="padding:12px;background:#e8f0ed;display:flex;gap:10px;flex-wrap:wrap">'+
+    '<button onclick="window.print()" style="padding:12px;background:#2f5d50;color:white;border:0;border-radius:8px">列印／儲存 PDF</button>'+ 
+    '<span style="font-size:13px">iPhone 可用 Safari 分享選單的「列印」，在預覽中儲存 PDF</span></div>'+ 
+    '<div class="estimate-print-wrap">'+body+'</div></body></html>';
+}
+function downloadEstimatePrintable(){
+  const html=estimatePrintDocument();if(!html)return;
+  const e=db.estimates.find(x=>x.id===currentEstimateId);
+  const blob=new Blob(['\ufeff',html],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=(e.no||'盛昱估價單').replace(/[\\/:*?"<>|]/g,'_')+'_列印版.html';
+  document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000);
+}
+function printEstimate(){
+  const html=estimatePrintDocument();if(!html)return;
+  // iOS 的主畫面網頁及內嵌瀏覽器可能不支援 window.print；提供可列印的獨立頁面。
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
+  if(isIOS){
+    const page=window.open('','_blank');
+    if(page){page.document.open();page.document.write(html);page.document.close();return;}
+    alert('目前瀏覽器封鎖列印視窗。請使用「另存可列印檔」，再以 Safari 開啟。');return;
+  }
+  if(typeof window.print==='function'){window.print();return;}
+  downloadEstimatePrintable();
+}
+
 function resetData(){
  if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[],adjustments:[],quotes:[],paymentPlans:[],estimates:[]};save();showPage('home')}
 }
@@ -1380,7 +1419,7 @@ function resetData(){
 
 
 
-const APP_VERSION='20261107-v54-scrollfix';
+const APP_VERSION='20261107-v55-printfix';
 
 
 async function cleanupOldCache(){
