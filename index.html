@@ -1399,28 +1399,28 @@ function estimatePrintDocument(){
   const content=document.getElementById('estimatePrintWrap').innerHTML;
   // 使用完全獨立的列印樣式，不繼承手機主畫面的窄欄、隱藏及捲動規則。
   const printCSS=`
-    @page{size:A4 portrait;margin:12mm 11mm}
+    @page{size:A4 portrait;margin:8mm 9mm}
     *{box-sizing:border-box}
     html,body{margin:0;padding:0;width:100%;height:auto;overflow:visible!important;background:#fff;color:#111;
       font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Microsoft JhengHei","Noto Sans CJK TC",sans-serif;
       -webkit-print-color-adjust:exact;print-color-adjust:exact}
-    body{font-size:11pt;line-height:1.5}
+    body{font-size:9.5pt;line-height:1.3}
     .print-actions{padding:12px;background:#e8f0ed;display:flex;gap:12px;align-items:center}
-    .estimate-print-wrap{width:100%;max-width:188mm;margin:0 auto;padding:12mm 10mm;color:#111}
+    .estimate-print-wrap{width:100%;max-width:188mm;margin:0 auto;padding:7mm 8mm;color:#111}
     .estimate-print-wrap>div:first-child{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:12mm!important}
     .estimate-print-wrap>div:first-child>div:first-child{flex:1 1 58%;min-width:0}
     .estimate-print-wrap>div:first-child>div:last-child{flex:0 0 38%;min-width:0;overflow-wrap:normal;word-break:keep-all}
-    .estimate-print-wrap h1{font-size:22pt;margin:0 0 4mm;line-height:1.2}
-    .estimate-print-wrap .company{font-size:11pt;line-height:1.65}
-    .meta{margin:7mm 0 6mm}
-    .estimate-meta-line{display:flex;align-items:flex-start;justify-content:flex-start;gap:2mm;margin:2mm 0;line-height:1.6;text-align:left}
+    .estimate-print-wrap h1{font-size:19pt;margin:0 0 2mm;line-height:1.15}
+    .estimate-print-wrap .company{font-size:9.5pt;line-height:1.35}
+    .meta{margin:4mm 0 4mm}
+    .estimate-meta-line{display:flex;align-items:flex-start;justify-content:flex-start;gap:2mm;margin:1mm 0;line-height:1.35;text-align:left}
     .estimate-meta-line strong{flex:0 0 auto;white-space:nowrap;font-weight:600}
     .estimate-meta-line span{flex:1;min-width:0;overflow-wrap:anywhere;text-align:left}
-    .row{display:flex;justify-content:space-between;gap:5mm;margin:2mm 0;align-items:baseline;min-width:0}
+    .row{display:flex;justify-content:space-between;gap:5mm;margin:1mm 0;align-items:baseline;min-width:0}
     .row>*{min-width:0;overflow-wrap:anywhere}
 
-    .estimate-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:9pt;background:#fff}
-    .estimate-table th,.estimate-table td{border:1px solid #777;padding:2.5mm 1.5mm;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:normal}
+    .estimate-table{width:100%;table-layout:fixed;border-collapse:collapse;font-size:8.5pt;background:#fff}
+    .estimate-table th,.estimate-table td{border:1px solid #777;padding:1.5mm 1mm;vertical-align:top;white-space:normal;overflow-wrap:anywhere;word-break:normal}
     .estimate-table th{background:#f0f0f0;text-align:center;font-weight:700}
     .estimate-table th:nth-child(1){width:5%}
     .estimate-table th:nth-child(2){width:20%}
@@ -1431,17 +1431,21 @@ function estimatePrintDocument(){
     .estimate-table th:nth-child(7){width:18%}
     .estimate-table td:nth-child(1),.estimate-table td:nth-child(4),.estimate-table td:nth-child(5){text-align:center}
     .estimate-table td:nth-child(6),.estimate-table td:nth-child(7){text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums;font-size:8.5pt}
-    .estimate-sign{margin-top:12mm;display:grid;grid-template-columns:1fr 1fr;gap:12mm;break-inside:avoid}
+    .estimate-sign{margin-top:5mm;display:grid;grid-template-columns:1fr 1fr;gap:12mm;break-inside:avoid}
     .estimate-sign-box{min-width:0;text-align:center}
-    .estimate-sign-space{height:50mm;border:1px solid #aaa;background:#fff}
-    .estimate-sign-label{padding-top:3mm;font-size:10pt;font-weight:600}
+    .estimate-sign-space{height:35mm;border:1px solid #aaa;background:#fff}
+    .estimate-sign-label{padding-top:1.5mm;font-size:9pt;font-weight:600}
     @media print{
       html,body{width:auto!important;overflow:visible!important}
       .print-actions{display:none!important}
       .estimate-print-wrap{width:100%;max-width:none;padding:0;margin:0}
       .estimate-table thead{display:table-header-group}
       .estimate-table tr{break-inside:avoid;page-break-inside:avoid}
-      .estimate-sign{break-inside:avoid}
+      .estimate-sign{break-inside:avoid;page-break-inside:avoid}
+      .estimate-print-wrap{font-size:9pt}
+      .estimate-print-wrap .meta{break-inside:avoid}
+      .estimate-table{font-size:8pt}
+      .estimate-table th,.estimate-table td{padding:1.2mm 1mm}
     }
     @media screen and (max-width:600px){
       .estimate-print-wrap{min-width:700px;width:700px;max-width:none;padding:18px}
@@ -1486,7 +1490,7 @@ function resetData(){
 
 
 
-const APP_VERSION='20261107-v56-a4-print';
+const APP_VERSION='20261107-v57-a4-onepage';
 
 
 async function cleanupOldCache(){
