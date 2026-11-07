@@ -231,12 +231,12 @@ body.modal-active{overflow:hidden}
   <div class="no-print" style="padding:14px">
     <button class="linkbtn" onclick="showEstimates()">‹ 返回估價單</button>
     <div class="estimate-toolbar">
-      <button class="primary" onclick="printEstimate()">列印／儲存 PDF</button>
+      <button class="primary" onclick="printEstimate()">直接產生 PDF</button>
       <button class="secondary" onclick="editCurrentEstimate()">編輯</button>
       <button class="secondary" onclick="openEstimateSignature()">✍️ 手指直接簽名</button>
       <button class="secondary" onclick="downloadEstimatePrintable()">另存可列印檔</button>
     </div>
-    <div class="muted">若在 iPhone 主畫面捷徑或 App 內無法列印，請按「另存可列印檔」，再用 Safari 開啟並使用分享 → 列印 → 儲存到檔案。</div>
+    <div class="muted">直接產生 PDF 不經過 Safari 列印，因此不會出現 GitHub 網址、日期或頁碼。首次使用需連線載入 PDF 元件。</div>
   </div>
   <div id="estimatePrintWrap" class="estimate-print-wrap"></div>
 </section>
@@ -1510,17 +1510,64 @@ function downloadEstimatePrintable(){
   document.body.appendChild(a);a.click();a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
-function printEstimate(){
-  const html=estimatePrintDocument();if(!html)return;
-  // iOS 的主畫面網頁及內嵌瀏覽器可能不支援 window.print；提供可列印的獨立頁面。
-  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
-  if(isIOS){
-    const page=window.open('','_blank');
-    if(page){page.document.open();page.document.write(html);page.document.close();return;}
-    alert('目前瀏覽器封鎖列印視窗。請使用「另存可列印檔」，再以 Safari 開啟。');return;
+// 直接生成 PDF，不經過瀏覽器列印，避免 Safari 自動加網址/日期/頁碼。
+let estimatePdfBusy=false;
+function loadEstimatePdfScript(url,check){
+  if(check())return Promise.resolve();
+  return new Promise((resolve,reject)=>{
+    const script=document.createElement('script');script.src=url;script.async=true;
+    script.onload=()=>check()?resolve():reject(new Error('PDF 元件載入失敗'));
+    script.onerror=()=>reject(new Error('無法下載 PDF 元件，請確認網路連線'));
+    document.head.appendChild(script);
+  });
+}
+async function printEstimate(){
+  if(estimatePdfBusy)return;
+  const e=db.estimates.find(x=>x.id===currentEstimateId);
+  if(!e){alert('請先開啟估價單');return;}
+  estimatePdfBusy=true;
+  const button=document.querySelector('#estimatePrint .estimate-toolbar .primary');
+  const original=button?button.textContent:'';
+  if(button){button.disabled=true;button.textContent='正在製作 PDF…';}
+  let frame=null;
+  try{
+    await loadEstimatePdfScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>typeof window.html2canvas==='function');
+    await loadEstimatePdfScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js',()=>!!(window.jspdf&&window.jspdf.jsPDF));
+    const html=estimatePrintDocument();if(!html)return;
+    frame=document.createElement('iframe');
+    frame.setAttribute('aria-hidden','true');
+    frame.style.cssText='position:fixed;left:-12000px;top:0;width:794px;height:1123px;border:0;pointer-events:none;opacity:1;';
+    document.body.appendChild(frame);
+    const doc=frame.contentDocument;
+    doc.open();doc.write(html);doc.close();
+    await new Promise(resolve=>setTimeout(resolve,250));
+    if(doc.fonts&&doc.fonts.ready)await doc.fonts.ready;
+    await Promise.all(Array.from(doc.images).map(img=>img.complete?Promise.resolve():new Promise(resolve=>{img.onload=resolve;img.onerror=resolve;setTimeout(resolve,5000);} )));
+    const page=doc.querySelector('.estimate-print-wrap');
+    if(!page)throw new Error('找不到估價單內容');
+    const canvas=await window.html2canvas(page,{backgroundColor:'#ffffff',scale:2,useCORS:true,logging:false,windowWidth:794,scrollX:0,scrollY:0});
+    const pdf=new window.jspdf.jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
+    const pageWidth=210,pageHeight=297,margin=8;
+    const imgW=pageWidth-margin*2,imgH=canvas.height*imgW/canvas.width;
+    // 一頁內自動等比例縮小；內容較長仍保留完整文字，不裁切簽名章。
+    const factor=Math.min(1,(pageHeight-margin*2)/imgH);
+    const drawW=imgW*factor,drawH=imgH*factor;
+    pdf.addImage(canvas.toDataURL('image/jpeg',0.94),'JPEG',(pageWidth-drawW)/2,margin,drawW,drawH,undefined,'FAST');
+    const filename=(e.no||'盛昱估價單').replace(/[\\/:*?"<>|]/g,'_')+'.pdf';
+    const blob=pdf.output('blob');
+    const file=new File([blob],filename,{type:'application/pdf'});
+    // iPhone Safari 可直接用分享選單存到「檔案」，其他瀏覽器直接下載。
+    if(navigator.canShare&&navigator.canShare({files:[file]})&&navigator.share){
+      try{await navigator.share({files:[file],title:filename});}
+      catch(err){if(err.name!=='AbortError')pdf.save(filename);}
+    }else pdf.save(filename);
+  }catch(err){
+    console.error('PDF export failed',err);
+    alert('產生 PDF 失敗：'+(err.message||err)+'。請確認網路連線後重試。');
+  }finally{
+    if(frame)frame.remove();estimatePdfBusy=false;
+    if(button){button.disabled=false;button.textContent=original;}
   }
-  if(typeof window.print==='function'){window.print();return;}
-  downloadEstimatePrintable();
 }
 
 function resetData(){
