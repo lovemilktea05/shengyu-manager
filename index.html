@@ -7,7 +7,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<meta name="app-version" content="20261107-v53">
+<meta name="app-version" content="20261107-v55">
 
 <title>盛昱室內裝修有限公司｜公司管理系統</title>
 <style>
@@ -151,7 +151,7 @@ body.modal-active{overflow:hidden}
 <div class="app">
 <header>
   <div class="brand">盛昱室內裝修有限公司</div>
-  <div class="sub">公司管理系統 V5.4｜手機版</div>
+  <div class="sub">公司管理系統 V5.5｜手機版</div>
 </header>
 
 <main>
@@ -236,7 +236,7 @@ body.modal-active{overflow:hidden}
       <button class="secondary" onclick="openEstimateSignature()">✍️ 手指直接簽名</button>
       <button class="secondary" onclick="downloadEstimatePrintable()">另存可列印檔</button>
     </div>
-    <div class="muted">直接產生 PDF 不經過 Safari 列印，因此不會出現 GitHub 網址、日期或頁碼。首次使用需連線載入 PDF 元件。</div>
+    <div class="muted">優先直接產生無網址、日期及頁碼的 PDF；若 PDF 元件無法載入，可使用備用列印功能。</div>
   </div>
   <div id="estimatePrintWrap" class="estimate-print-wrap"></div>
 </section>
@@ -298,7 +298,7 @@ body.modal-active{overflow:hidden}
   <div class="card">
     <h3>系統更新</h3>
     <p class="muted">如果主畫面沒有顯示最新版本，可手動檢查並重新載入。</p>
-    <div class="row"><span class="muted">目前版本</span><b>V5.3-20261107</b></div>
+    <div class="row"><span class="muted">目前版本</span><b>V5.5-20261107</b></div>
     <button class="primary" onclick="forceAppUpdate()">檢查更新</button>
   </div>
   <div class="card">
@@ -1512,14 +1512,36 @@ function downloadEstimatePrintable(){
 }
 // 直接生成 PDF，不經過瀏覽器列印，避免 Safari 自動加網址/日期/頁碼。
 let estimatePdfBusy=false;
-function loadEstimatePdfScript(url,check){
+function loadEstimatePdfScript(urls,check){
   if(check())return Promise.resolve();
-  return new Promise((resolve,reject)=>{
-    const script=document.createElement('script');script.src=url;script.async=true;
-    script.onload=()=>check()?resolve():reject(new Error('PDF 元件載入失敗'));
-    script.onerror=()=>reject(new Error('無法下載 PDF 元件，請確認網路連線'));
-    document.head.appendChild(script);
-  });
+  const sources=Array.isArray(urls)?urls:[urls];
+  return (async()=>{
+    for(const url of sources){
+      if(check())return;
+      try{
+        await new Promise((resolve,reject)=>{
+          const script=document.createElement('script');
+          const timeout=setTimeout(()=>{script.remove();reject(new Error('載入逾時'));},9000);
+          script.src=url;script.async=true;
+          script.onload=()=>{clearTimeout(timeout);check()?resolve():reject(new Error('元件無效'));};
+          script.onerror=()=>{clearTimeout(timeout);script.remove();reject(new Error('載入失敗'));};
+          document.head.appendChild(script);
+        });
+        if(check())return;
+      }catch(err){console.warn('PDF library source unavailable',url,err);}
+    }
+    throw new Error('PDF 元件載入失敗');
+  })();
+}
+function estimatePdfPrintFallback(){
+  const html=estimatePrintDocument();if(!html)return;
+  const win=window.open('','_blank');
+  if(!win){
+    alert('瀏覽器阻擋了備用列印視窗，請允許彈出式視窗後重試。');
+    return;
+  }
+  win.document.open();win.document.write(html);win.document.close();
+  win.focus();
 }
 async function printEstimate(){
   if(estimatePdfBusy)return;
@@ -1531,8 +1553,8 @@ async function printEstimate(){
   if(button){button.disabled=true;button.textContent='正在製作 PDF…';}
   let frame=null;
   try{
-    await loadEstimatePdfScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',()=>typeof window.html2canvas==='function');
-    await loadEstimatePdfScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js',()=>!!(window.jspdf&&window.jspdf.jsPDF));
+    await loadEstimatePdfScript(['https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js','https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js','https://unpkg.com/html2canvas@1.4.1/dist/html2canvas.min.js'],()=>typeof window.html2canvas==='function');
+    await loadEstimatePdfScript(['https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.2/jspdf.umd.min.js','https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js','https://unpkg.com/jspdf@2.5.2/dist/jspdf.umd.min.js'],()=>!!(window.jspdf&&window.jspdf.jsPDF));
     const html=estimatePrintDocument();if(!html)return;
     frame=document.createElement('iframe');
     frame.setAttribute('aria-hidden','true');
@@ -1563,7 +1585,7 @@ async function printEstimate(){
     }else pdf.save(filename);
   }catch(err){
     console.error('PDF export failed',err);
-    alert('產生 PDF 失敗：'+(err.message||err)+'。請確認網路連線後重試。');
+    if(confirm('直接產生 PDF 暫時無法使用（'+(err.message||err)+'）。\n\n要開啟備用列印版嗎？可在 Safari 選擇列印並儲存為 PDF。'))estimatePdfPrintFallback();
   }finally{
     if(frame)frame.remove();estimatePdfBusy=false;
     if(button){button.disabled=false;button.textContent=original;}
