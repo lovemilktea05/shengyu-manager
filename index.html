@@ -135,7 +135,7 @@ main{padding:14px}
 <div class="app">
 <header>
   <div class="brand">盛昱室內裝修有限公司</div>
-  <div class="sub">公司管理系統 V5.2｜手機版</div>
+  <div class="sub">公司管理系統 V5.3｜手機版</div>
 </header>
 
 <main>
@@ -280,7 +280,7 @@ main{padding:14px}
   <div class="card">
     <h3>系統更新</h3>
     <p class="muted">如果主畫面沒有顯示最新版本，可手動檢查並重新載入。</p>
-    <div class="row"><span class="muted">目前版本</span><b>V5.1-1787471981</b></div>
+    <div class="row"><span class="muted">目前版本</span><b>V5.3-20261107</b></div>
     <button class="primary" onclick="forceAppUpdate()">檢查更新</button>
   </div>
   <div class="card">
@@ -334,7 +334,7 @@ const save=()=>{
 }
 const id=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
 const money=n=>'$'+Number(n||0).toLocaleString('zh-TW');
-const today=()=>new Date().toISOString().slice(0,10);
+const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 const ym=d=>(d||'').slice(0,7);
 const thisMonth=()=>today().slice(0,7);
 
@@ -435,15 +435,15 @@ function fillClientFromList(sel){
  const c=db.clients.find(x=>x.id===sel.value);
  if(!c) return;
  const f=sel.form;
- if(f.client) f.client.value=c.name||'';
- if(f.contact) f.contact.value=c.contact||'';
- if(f.phone) f.phone.value=c.phone||'';
+ if(f.elements.namedItem('client')) f.elements.namedItem('client').value=c.name||'';
+ if(f.elements.namedItem('contact')) f.elements.namedItem('contact').value=c.contact||'';
+ if(f.elements.namedItem('phone')) f.elements.namedItem('phone').value=c.phone||'';
 }
 function fillVendorFromList(sel){
  const v=db.vendors.find(x=>x.id===sel.value);
  if(!v) return;
  const f=sel.form;
- if(f.vendor) f.vendor.value=v.name||'';
+ if(f.elements.namedItem('vendor')) f.elements.namedItem('vendor').value=v.name||'';
 }
 
 function addProject(e){let x=formObj(e);db.projects.push({id:id(),...x,contract:+x.contract||0,created:Date.now()});save();closeModal();showPage('projects')}
@@ -470,6 +470,7 @@ function projectCard(p){
   <div class="row"><span class="muted">調整後合約</span><b class="money">${money(t.adjusted)}</b></div>
   <div class="row"><span class="muted">已收 / 待收</span><span>${money(t.income)} / ${money(due)}</span></div>
   <div class="row"><span class="muted">累計支出</span><span>${money(t.expense)}</span></div>
+   <div class="row"><span class="muted">預估毛利／毛利率</span><b>${money(t.adjusted-t.expense)}／${t.adjusted?((t.adjusted-t.expense)/t.adjusted*100).toFixed(1):"0.0"}%</b></div>
   <div class="row"><span class="muted">工程進度</span><span>${t.progress}%</span></div>
   <div class="progress"><i style="width:${t.progress}%"></i></div>
  </div>`;
@@ -491,13 +492,15 @@ function openProject(pid){
   <div class="stat"><div class="k">待收款</div><div class="v">${money(due)}</div></div>
   <div class="stat"><div class="k">累計支出</div><div class="v">${money(t.expense)}</div></div>
  </div>
- <div class="section-title"><h2>工程資料</h2></div>
+ <div class="card"><div class="row"><span class="muted">預估毛利</span><b>${money(t.adjusted-t.expense)}</b></div><div class="row"><span class="muted">預估毛利率</span><b>${t.adjusted?((t.adjusted-t.expense)/t.adjusted*100).toFixed(1):"0.0"}%</b></div><div class="muted" style="font-size:12px">依調整後合約金額減累計支出估算，未計未入帳成本。</div></div>
+  <div class="section-title"><h2>工程資料</h2></div>
  <div class="card">
   <div class="row"><span class="muted">地址</span><span>${p.address||'—'}</span></div>
   <div class="row"><span class="muted">負責人</span><span>${p.owner||'—'}</span></div>
   <div class="row"><span class="muted">開工</span><span>${p.start||'—'}</span></div>
   <div class="row"><span class="muted">預計完工</span><span>${p.end||'—'}</span></div>
-  <div class="row"><span class="muted">工程狀態</span><span><b>${p.status}</b> <button class="linkbtn" onclick="editProjectStatus('${p.id}')">變更</button></span></div>
+  <div class="actions"><button class="primary" onclick="openProjectEdit('${p.id}')">編輯工程資料</button></div>
+   <div class="row"><span class="muted">工程狀態</span><span><b>${p.status}</b> <button class="linkbtn" onclick="editProjectStatus('${p.id}')">變更</button></span></div>
   <div class="row"><span class="muted">原合約金額</span><span>${money(t.base)}</span></div>
   <div class="row"><span class="muted">追加工程</span><span>＋${money(t.adds)}</span></div>
   <div class="row"><span class="muted">減項工程</span><span>－${money(t.deductions)}</span></div>
@@ -1173,6 +1176,7 @@ function renderEstimates(){
       <div class="row"><h3>${esc(e.no||'估價單')}</h3><span class="badge">${esc(e.status||'草稿')}</span></div>
       <div class="row"><span>${esc(p?p.name:(e.title||'未指定工程'))}</span><b>${money(estimateGrand(e))}</b></div>
       <div class="row"><span class="muted">${esc(e.clientName||'未填客戶')}</span><span class="muted">${esc(e.date||'')}</span></div>
+       <div class="actions"><button type="button" class="secondary" onclick="event.stopPropagation();openEstimateForm('','${e.id}')">編輯草稿</button><button type="button" class="primary" onclick="event.stopPropagation();openEstimate('${e.id}')">開啟估價單</button></div>
     </div>`;
   }).join(''):'<div class="empty">尚未建立估價單</div>';
 }
@@ -1216,11 +1220,11 @@ function openEstimateForm(pid='',eid=''){
 function fillEstimateProject(sel){
   const p=db.projects.find(x=>x.id===sel.value); if(!p)return;
   const f=sel.form;
-  if(f.title&&!f.title.value)f.title.value=p.name||'';
-  if(f.clientName)f.clientName.value=p.client||'';
-  if(f.contact)f.contact.value=p.contact||'';
-  if(f.phone)f.phone.value=p.phone||'';
-  if(f.address)f.address.value=p.address||'';
+  if(f.elements.namedItem('title')&&!f.elements.namedItem('title').value)f.elements.namedItem('title').value=p.name||'';
+  if(f.elements.namedItem('clientName'))f.elements.namedItem('clientName').value=p.client||'';
+  if(f.elements.namedItem('contact'))f.elements.namedItem('contact').value=p.contact||'';
+  if(f.elements.namedItem('phone'))f.elements.namedItem('phone').value=p.phone||'';
+  if(f.elements.namedItem('address'))f.elements.namedItem('address').value=p.address||'';
 }
 function addEstimateItem(){ estimateDraftItems.push({name:'',spec:'',qty:1,unit:'式',price:0}); renderEstimateItems(); }
 function removeEstimateItem(i){ estimateDraftItems.splice(i,1); if(!estimateDraftItems.length)estimateDraftItems.push({name:'',spec:'',qty:1,unit:'式',price:0}); renderEstimateItems(); }
@@ -1244,8 +1248,8 @@ function renderEstimateItems(){
 function renderEstimateDraftTotal(){
   const form=document.querySelector('#modal .form'); if(!form)return;
   const subtotal=estimateDraftItems.reduce((s,i)=>s+(+i.qty||0)*(+i.price||0),0);
-  const taxOn=!!(form.taxEnabled&&form.taxEnabled.checked);
-  const rate=+(form.taxRate&&form.taxRate.value)||0;
+  const taxOn=!!(form.elements.namedItem('taxEnabled')&&form.elements.namedItem('taxEnabled').checked);
+  const rate=+(form.elements.namedItem('taxRate')&&form.elements.namedItem('taxRate').value)||0;
   const tax=taxOn?Math.round(subtotal*rate/100):0;
   const grand=subtotal+tax;
   if(document.getElementById('estimateSubtotal'))document.getElementById('estimateSubtotal').textContent=money(subtotal);
@@ -1256,7 +1260,7 @@ function saveEstimate(ev,eid){
   const x=formObj(ev),form=ev.target;
   const data={projectId:x.projectId||'',no:x.no||nextEstimateNo(),title:x.title||'室內裝修工程估價',date:x.date||today(),
     validUntil:x.validUntil||'',status:x.status||'草稿',clientName:x.clientName||'',contact:x.contact||'',phone:x.phone||'',
-    address:x.address||'',taxEnabled:!!form.taxEnabled.checked,taxRate:+x.taxRate||5,note:x.note||'',
+    address:x.address||'',taxEnabled:!!form.elements.namedItem('taxEnabled').checked,taxRate:+x.taxRate||5,note:x.note||'',
     items:estimateDraftItems.map(i=>({name:i.name||'',spec:i.spec||'',qty:+i.qty||0,unit:i.unit||'',price:+i.price||0}))};
   if(eid){ const e=db.estimates.find(z=>z.id===eid); Object.assign(e,data,{updated:Date.now()}); }
   else db.estimates.push({id:id(),...data,created:Date.now()});
@@ -1293,6 +1297,43 @@ function renderEstimatePrint(e){
     ${e.note?`<div style="margin-top:22px"><b>備註／付款條件</b><div style="white-space:pre-wrap;margin-top:8px;line-height:1.6">${esc(e.note)}</div></div>`:''}
     <div class="estimate-sign"><div>客戶簽認</div><div>盛昱室內裝修有限公司</div></div>`;
 }
+
+
+function openProjectEdit(pid){
+ const p=db.projects.find(x=>x.id===pid);if(!p)return;
+ modal('編輯工程資料',`<form class="form" onsubmit="saveProjectEdit(event,'${pid}')">
+ <label>工程名稱 *</label><input name="name" required value="${esc(p.name)}">
+ <label>客戶／公司名稱</label><input name="client" value="${esc(p.client)}">
+ <label>聯絡人</label><input name="contact" value="${esc(p.contact)}">
+ <label>電話</label><input name="phone" value="${esc(p.phone)}">
+ <label>工程地址</label><input name="address" value="${esc(p.address)}">
+ <label>合約金額</label><input name="contract" type="number" min="0" value="${+p.contract||0}">
+ <label>開工日期</label><input name="start" type="date" value="${esc(p.start)}">
+ <label>預計完工日期</label><input name="end" type="date" value="${esc(p.end)}">
+ <label>負責人</label><input name="owner" value="${esc(p.owner)}">
+ <label>工程狀態</label><select name="status">${['洽談中','施工中','完工','保固中','已結案'].map(v=>`<option ${p.status===v?'selected':''}>${v}</option>`).join('')}</select>
+ <label>備註</label><textarea name="note">${esc(p.note)}</textarea>
+ <div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存修改</button></div></form>`);
+}
+function saveProjectEdit(ev,pid){
+ const p=db.projects.find(x=>x.id===pid);if(!p)return;
+ const x=formObj(ev);Object.assign(p,x,{contract:+x.contract||0});
+ save();closeModal();openProject(pid);
+}
+function editIncome(rid){
+ const x=db.incomes.find(r=>r.id===rid);if(!x)return;
+ modal('編輯收款',`<form class="form" onsubmit="saveRecordEdit(event,'incomes','${rid}')"><label>項目</label><input name="type" value="${esc(x.type)}"><label>金額</label><input name="amount" type="number" min="0" required value="${+x.amount||0}"><label>日期</label><input name="date" type="date" value="${esc(x.date)}"><label>備註</label><textarea name="note">${esc(x.note)}</textarea><div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存</button></div></form>`);
+}
+function editExpense(rid){
+ const x=db.expenses.find(r=>r.id===rid);if(!x)return;
+ modal('編輯支出',`<form class="form" onsubmit="saveRecordEdit(event,'expenses','${rid}')"><label>類別</label><input name="type" value="${esc(x.type)}"><label>廠商</label><input name="vendor" value="${esc(x.vendor)}"><label>金額</label><input name="amount" type="number" min="0" required value="${+x.amount||0}"><label>日期</label><input name="date" type="date" value="${esc(x.date)}"><label>備註</label><textarea name="note">${esc(x.note)}</textarea><div class="actions"><button type="button" class="secondary" onclick="closeModal()">取消</button><button class="primary">儲存</button></div></form>`);
+}
+function saveRecordEdit(ev,collection,rid){
+ const r=db[collection].find(x=>x.id===rid);if(!r)return;
+ const x=formObj(ev);Object.assign(r,x,{amount:+x.amount||0});
+ save();closeModal();openProject(r.projectId);
+}
+function forceAppUpdate(){location.reload();}
 
 function resetData(){
  if(confirm('確定要清除全部測試資料嗎？此動作無法復原。')){db={projects:[],incomes:[],expenses:[],progress:[],clients:[],vendors:[],adjustments:[],quotes:[],paymentPlans:[],estimates:[]};save();showPage('home')}
